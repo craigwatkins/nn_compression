@@ -40,9 +40,9 @@ def test():
 
 if __name__ == "__main__":
     test()
-    psnr_v = calculate_psnr("images/test/reference.png", "images/test.png")
+    psnr_v = calculate_psnr("images/test/reference.png", "images/test/test.png")
     print("vector psnr", psnr_v)
     psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.jpeg")
-    psnr_verify = calculate_psnr("images/test.png", "images/test/verify.png")
+    psnr_verify = calculate_psnr("images/test/test.png", "images/test/verify.png")
     print("jpeg psnr", psnr_j)
     print("verify psnr", psnr_verify)

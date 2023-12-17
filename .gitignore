@@ -1,5 +1,7 @@
 annoyIndexes/*
 !annoyIndexes/.gitkeep
-bins/test/
-images/test/
+bins/test/*
+!bins/test/.gitkeep
+images/test/*
+!images/test/.gitkeep
 .idea/
