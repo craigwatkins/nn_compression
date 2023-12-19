@@ -27,10 +27,10 @@ class NNCompressor:
         self.matches = []
         self.height = 0
         self.width = 0
-        self.match_bit_size = 8
         self.decompressed_values = None
-        self.compressed_bit_length = 0
-        self.uncompressed_bit_length = 0
+        self.max_compressed_bit_size = 8
+        self.compressed_length = 0
+        self.uncompressed_bit_size = 0
         self.compressed_path = ''
 
     def get_lookup_table(self):
@@ -58,10 +58,10 @@ class NNCompressor:
         self.get_best_matches()
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
-        image_data = self.compress_first_bits(self.matches, self.match_bit_size)
+        image_data = self.huff_compress()
         header_obj = Header()
         header = header_obj.build_header([self.compressed_values.shape[0], self.compressed_values.shape[1],
-                                          self.compressed_bit_length, self.uncompressed_bit_length,
+                                          self.compressed_length, self.uncompressed_bit_size,
                                           self.clip_min, self.clip_max])
         # save the compressed image
         pb.write_padded_bytes(header+image_data, self.compressed_path)
@@ -130,29 +130,38 @@ class NNCompressor:
         self.match_counter[i] += 1
         return closest_match, block_size
 
-    def compress_first_bits(self, values, bit_size):
+    def huff_compress(self):
         """
-        Description: compress the first bit_size bits of values using Huffman compression
-        and combine them with the remaining bits into a single binary string
+        Description: compress the first bits of values using Huffman compression
+        some bits may be uncompressed if the uncompressed bit size is not zero
         """
+        values = self.matches
         indexes = [self.lookup_table.index_dict[tuple(x)] for x in values]
         indexes = np.array(indexes)
         max_index = self.lookup_table.max_index
+        # get the number of bits needed to represent the largest index
         num_bits = len(bin(max_index)[2:])
-        self.uncompressed_bit_length = num_bits - bit_size
+        remaining_bits = ''
+        if self.max_compressed_bit_size < num_bits:
+            compressed_bit_size = self.max_compressed_bit_size
+            self.uncompressed_bit_size = num_bits - compressed_bit_size
+            # if the number of bits needed to represent the largest index is greater than the max compressed bit length
+            # when we will need to deal with uncompressed bits
+            # get the remaining bits (the least significant bits) and add them to a new list
+            remaining_bits = [bin(x)[2:].zfill(num_bits)[compressed_bit_size:] for x in indexes]
+            # convert the remaining bits to a single binary string
+            remaining_bits = ''.join(remaining_bits)
+        else:
+            compressed_bit_size = num_bits
         # convert the indexes to bits and take the first bit_size bits of each index
         # (the first bit_size bits are the most significant bits)
-        # pad the bits with 0s if necessary to make them all the same length (num_bits)
-        diffs_bits = [bin(x)[2:].zfill(num_bits)[:bit_size] for x in indexes]
-        # get the remaining bits (the least significant bits) and add them to a new list
-        remaining_bits = [bin(x)[2:].zfill(num_bits)[bit_size:] for x in indexes]
-        # convert the remaining bits to a single binary string
-        remaining_bits = ''.join(remaining_bits)
+        # pad the bits with 0s if necessary to make them all the same length
+        compression_bits = [bin(x)[2:].zfill(num_bits)[:compressed_bit_size] for x in indexes]
         # The huffman class expects decimal values, so convert the bits to decimal
-        diffs_decimals = [int(x, 2) for x in diffs_bits]
+        diffs_decimals = [int(x, 2) for x in compression_bits]
         huff = HuffmanCoding()
         huff_compressed, encoded_list = huff.compress(diffs_decimals)
-        self.compressed_bit_length = len(huff_compressed)
+        self.compressed_length = len(huff_compressed)
         file_info = huff_compressed + remaining_bits
         return file_info
 
@@ -174,11 +183,11 @@ class NNCompressor:
         destination_values[row_idx - 1, col_idx:col_idx + max_block_size] = approximate_neighbors
 
     def decompress(self, file_name=''):
-        decompressed_matches, decompressed_indexes = self.decompress_file(file_name, self.match_bit_size, self.lookup_table)
+        decompressed_matches, decompressed_indexes = self.decompress_file(file_name, self.lookup_table)
         # reconstruct the image
         self.rebuild_image(decompressed_matches)
 
-    def decompress_file(self, file_name, bit_size, lookup_table):
+    def decompress_file(self, file_name, lookup_table):
         """
         Description: decompress the first bit_size bits of values
         """
@@ -192,23 +201,22 @@ class NNCompressor:
         compressed_bit_length = header_values['length']
         uncompressed_bit_size = header_values['uncompressed_bit_size']
         first_bits = full_file[header_length:header_length+compressed_bit_length]
-        uncompressed_bits = full_file[header_length+compressed_bit_length:]
         huff = HuffmanCoding()
         first_bits = huff.decompress_file(first_bits)
-        if not first_bits or not uncompressed_bits:
-            print(f"""Error: Could not open file""")
-            return None, None
-        # convert the integers to bits and pad them with 0s if necessary to make them all the same length (bit_size)
-        decompressed_first_bits = [bin(x)[2:].zfill(bit_size) for x in first_bits]
-        # break the remaining bits into groups of remaining_match_bit_size bits
-        uncompressed_bits = [uncompressed_bits[i:i + uncompressed_bit_size] for i in range(0, len(uncompressed_bits), uncompressed_bit_size)]
-        # combine decompressed_first_bits and remaining_matches_bits into a single list
-        decompressed = [decompressed_first_bits[i] + uncompressed_bits[i] for i in range(len(decompressed_first_bits))]
-        # convert to decimal
-        decompressed_indexes = [int(x, 2) for x in decompressed]
+        uncompressed_bits = full_file[header_length+compressed_bit_length:]
+        decompressed_indexes = first_bits
+        if uncompressed_bits:
+            compressed_bit_size = len(bin(max(first_bits))[2:])
+            # convert the integers to bits and pad them with 0s if necessary to make them all the same length (bit_size)
+            decompressed_first_bits = [bin(x)[2:].zfill(compressed_bit_size) for x in first_bits]
+            # break the remaining bits into groups of remaining_match_bit_size bits
+            uncompressed_bits = [uncompressed_bits[i:i + uncompressed_bit_size] for i in range(0, len(uncompressed_bits), uncompressed_bit_size)]
+            # combine decompressed_first_bits and remaining_matches_bits into a single list
+            decompressed = [decompressed_first_bits[i] + uncompressed_bits[i] for i in range(len(decompressed_first_bits))]
+            # convert to decimal
+            decompressed_indexes = [int(x, 2) for x in decompressed]
         # convert to vectors
         decompressed_vectors = [lookup_table.index_dict_reverse[x] for x in decompressed_indexes]
-
         return decompressed_vectors, decompressed_indexes
 
     def rebuild_image(self, matches):
@@ -226,7 +234,9 @@ class NNCompressor:
                     self.approximate_top_values(row_idx, col_idx, decompressed_values)
                 match = matches[match_idx]
                 block_size = len(match)
-                decompressed_values[row_idx, col_idx:col_idx+block_size] = np.clip(decompressed_values[row_idx-1, col_idx:col_idx+block_size] - np.array(match), self.clip_min, self.clip_max)
+                decompressed_values[row_idx, col_idx:col_idx+block_size] = np.clip(decompressed_values[row_idx-1,
+                                                                                   col_idx:col_idx+block_size] - np.array(match),
+                                                                                   self.clip_min, self.clip_max)
                 col_idx += block_size
                 match_idx += 1
         # delete the first row of decompressed_values

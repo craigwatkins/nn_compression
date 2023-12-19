@@ -4,7 +4,7 @@ from nNComressor import NNCompressor
 import time
 
 
-def make_reference_image(image_path, crop_size=100, crop_offset=0, file_path="images/reference", crop_image=True):
+def make_reference_image(image_path, crop_size=100, crop_offset=0, file_path="images/test/reference", crop_image=True):
     # open image from filepath, crop it, and save as "reference.png"
     img = cv2.imread(image_path)
     if crop_image:
