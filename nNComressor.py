@@ -21,6 +21,7 @@ class NNCompressor:
         self.match_counter = [0] * len(self.lookup_table.set_list)
         self.original_values = np.array([])
         self.compressed_values = np.array([])
+        self.compressed_indexes = []
         self.error_threshold = 0
         self.clip_min = 0
         self.clip_max = 255
@@ -32,6 +33,9 @@ class NNCompressor:
         self.compressed_length = 0
         self.uncompressed_bit_size = 0
         self.compressed_path = ''
+        self.row_idx = 0
+        self.specials = [[0], [0], [0]]
+
 
     def get_lookup_table(self):
         """
@@ -56,6 +60,7 @@ class NNCompressor:
         self.width = self.original_values.shape[1]
 
         self.get_best_matches()
+        print("specials:", self.specials)
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
         image_data = self.huff_compress()
@@ -89,6 +94,7 @@ class NNCompressor:
         """
         max_block_size = self.lookup_table.max_block_size
         for row_idx in range(1, self.height):
+            self.row_idx = row_idx
             col_idx = 0
             row_diffs = self.compressed_values[row_idx - 1, :] - self.original_values[row_idx, :]
             while col_idx < self.width:
@@ -106,6 +112,7 @@ class NNCompressor:
     def get_match(self, col_idx, row_diffs):
         block_size = 0
         closest_match = None
+        closest_index = None
         i = 0
         for i, a_set in enumerate(self.lookup_table.set_list):
             block_size = a_set.block_size
@@ -119,15 +126,41 @@ class NNCompressor:
                 # if the difference is too large, move on to the next smaller vector size
                 # the odds of finding a good match are low and this will save time
                 continue
-            closest_match = tuple(a_set.set_index.get_closest_match(diff))
+            if block_size == 3 and col_idx > 0 and self.row_idx > 1 and 1 == 0:
+                # find the paeth, average and left
+                # paeth = left + above - above_left
+                left = self.compressed_values[self.row_idx, col_idx-3:col_idx]
+                above = self.compressed_values[self.row_idx-1, col_idx:col_idx+3]
+                above_left = self.compressed_values[self.row_idx-1, col_idx-3:col_idx]
+                paeth = left + above - above_left
+                average = (left + above) // 2
+                current_block = self.original_values[self.row_idx, col_idx:col_idx+3]
+                paeth_error = np.linalg.norm(paeth - current_block)
+                average_error = np.linalg.norm(average - current_block)
+                left_error = np.linalg.norm(left - current_block)
+                # error_adjustments = [paeth - above, average - above, left - above]
+                # find the index of the smallest error
+                min_error_idx = np.argmin([paeth_error, average_error, left_error])
+                min_error = [paeth_error, average_error, left_error][min_error_idx]
+                if min_error < self.error_threshold:
+                    self.specials[min_error_idx][0] += 1
+                    closest_index = min_error_idx
+                    self.compressed_indexes.append(closest_index)
+                    adjusted_match = above - [paeth, average, left][min_error_idx]
+                    return adjusted_match, 3
+
+            closest_match, closest_index = tuple(a_set.set_index.get_closest_match(diff))
+            closest_index = self.lookup_table.index_dict[tuple(closest_match)]
             error = np.linalg.norm(diff - np.array(closest_match))
             under_threshold = error < self.error_threshold
             if under_threshold:
                 self.match_counter[i] += 1
+                self.compressed_indexes.append(closest_index)
                 return closest_match, block_size
             else:
                 continue
         self.match_counter[i] += 1
+        self.compressed_indexes.append(closest_index)
         return closest_match, block_size
 
     def huff_compress(self):
@@ -136,7 +169,8 @@ class NNCompressor:
         some bits may be uncompressed if the uncompressed bit size is not zero
         """
         values = self.matches
-        indexes = [self.lookup_table.index_dict[tuple(x)] for x in values]
+        # indexes = [self.lookup_table.index_dict[tuple(x)] for x in values]
+        indexes = self.compressed_indexes
         indexes = np.array(indexes)
         max_index = self.lookup_table.max_index
         # get the number of bits needed to represent the largest index
@@ -222,6 +256,8 @@ class NNCompressor:
     def rebuild_image(self, matches):
         """
         Description: This method is used to rebuild the image.
+
+        :param matches: The list of matches that will be used to rebuild the image.
         """
         decompressed_values = np.zeros((self.height, self.width), dtype=np.int32)
         decompressed_values = np.insert(decompressed_values, 0, 128, axis=0)
@@ -233,7 +269,18 @@ class NNCompressor:
                 if row_idx == 1 and col_idx > 0:
                     self.approximate_top_values(row_idx, col_idx, decompressed_values)
                 match = matches[match_idx]
-                block_size = len(match)
+                if len(match) == 1:
+                    # if the match is a special value, use it as the index for the lookup table
+                    block_size = 3
+                    above = decompressed_values[row_idx-1, col_idx:col_idx+3]
+                    left = decompressed_values[row_idx, col_idx-3:col_idx]
+                    above_left = decompressed_values[row_idx-1, col_idx-3:col_idx]
+                    paeth = left + above - above_left
+                    average = (left + above) // 2
+                    specials = [paeth, average, left]
+                    match = above - specials[match[0]]
+                else:
+                    block_size = len(match)
                 decompressed_values[row_idx, col_idx:col_idx+block_size] = np.clip(decompressed_values[row_idx-1,
                                                                                    col_idx:col_idx+block_size] - np.array(match),
                                                                                    self.clip_min, self.clip_max)

@@ -16,7 +16,7 @@ class LookupTable:
         self.create_lookup_table()
 
     def create_lookup_table(self):
-        super_set = []
+        super_set = [[0], [1], [2]]
         for i, a_set in enumerate(self.set_list):
             super_set += a_set.vectors
         super_set = [tuple(x) for x in super_set]

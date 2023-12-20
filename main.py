@@ -12,14 +12,22 @@ def make_reference_image(image_path, crop_size=100, crop_offset=0, file_path="im
     save_jpeg(img, file_path+".jpeg", 100)
 
 
+def decompress_image(save_path):
+    decompressor = NNCompressor()
+    decompressor.decompress(save_path)
+    save_image(decompressor.decompressed_values, "images/test/verify.png")
+    psnr_verify = calculate_psnr("images/test/test.png", "images/test/verify.png")
+    print("verify psnr", psnr_verify)
+
+
 def demo():
-    crop_size = 450
+    crop_size = 250
     crop_offset = 150
-    image = "19"
+    image = "15"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
-    error_threshold = 3.8
-    make_reference_image(source_path, crop_size, crop_offset)
+    error_threshold = 5.5
+    make_reference_image(source_path, crop_size, crop_offset, crop_image=True)
 
     print("compressing image")
     compressed = NNCompressor()
@@ -27,16 +35,12 @@ def demo():
     # save the regenerated image
     save_image(compressed.compressed_values, "images/test/test.png")
     del compressed
-    decompressor = NNCompressor()
-    decompressor.decompress(save_path)
+    decompress_image(save_path)
 
-    save_image(decompressor.decompressed_values, "images/test/verify.png")
     psnr_v = calculate_psnr("images/test/reference.png", "images/test/test.png")
     print("vector psnr", psnr_v)
     psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.jpeg")
-    psnr_verify = calculate_psnr("images/test/test.png", "images/test/verify.png")
     print("jpeg psnr", psnr_j)
-    print("verify psnr", psnr_verify)
 
 
 if __name__ == "__main__":
