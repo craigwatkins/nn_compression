@@ -6,13 +6,15 @@ import math
 
 class SetIndex:
     """
-    SetIndex class:
+    This class uses the ANNOY library to create a search index for a set of vectors.
     Properties:
         sorted_values: list of tuples sorted by distance from null vector
+        set_list_index: int, index of set in lookup table
         index_type: string, type of index to use
         index_offset: int, offset for index
     Methods:
         __init__: initialize SetIndex object
+        create_index: creates index for set
         get_closest_match: returns closest match to a given vector
     """
     def __init__(self, sorted_values, set_list_index, index_type='annoy', annoy_num_trees=30, index_offset=0, use_saved_index=False):

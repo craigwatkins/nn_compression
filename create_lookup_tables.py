@@ -10,4 +10,3 @@ def create_lookup_table():
     index_sets = [IndexedSet(x, use_saved_index=use_saved_index) for x in sample_sets]
     lookup_table_1 = LookupTable(index_sets, use_saved_indexes=use_saved_index)
     return lookup_table_1
-

@@ -3,7 +3,9 @@ from setIndex import SetIndex
 
 class IndexedSet:
     """
-        This class associates a set of vectors with a search index for faster nearest neighbor searches.
+        This class associates a set of vectors with a search index for faster nearest neighbor searches. It insulates
+        itself from the particular method of indexing by using the SetIndex class.
+
         Properties: vectors: The set of vectors
                     set_index: The SetIndex object
                     block_size: The size of the tuple
