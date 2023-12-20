@@ -5,3 +5,4 @@ bins/test/*
 images/test/*
 !images/test/.gitkeep
 .idea/
+scripts/

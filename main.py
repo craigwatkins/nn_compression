@@ -19,16 +19,18 @@ def demo():
     image = "19"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
-    error_threshold = 5
+    error_threshold = 3.8
     make_reference_image(source_path, crop_size, crop_offset)
 
     print("compressing image")
     compressed = NNCompressor()
     compressed.compress('images/test/reference.png', save_path, error_threshold)
-    decompressor = NNCompressor()
-    decompressor.decompress(save_path)
     # save the regenerated image
     save_image(compressed.compressed_values, "images/test/test.png")
+    del compressed
+    decompressor = NNCompressor()
+    decompressor.decompress(save_path)
+
     save_image(decompressor.decompressed_values, "images/test/verify.png")
     psnr_v = calculate_psnr("images/test/reference.png", "images/test/test.png")
     print("vector psnr", psnr_v)

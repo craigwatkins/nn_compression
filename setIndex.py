@@ -35,13 +35,19 @@ class SetIndex:
             # check to see if the tree has already been built
             if os.path.isfile(file_name) and self.use_saved_index:
                 index = AnnoyIndex(self.block_size, 'euclidean')
-                index.load(file_name)
+                try:
+                    index.load(file_name)
+                except OSError as e:
+                    print(f"An error occurred: {e}.")
             else:
                 index = AnnoyIndex(self.block_size, metric='euclidean')
                 for i, vector in enumerate(self.sorted_values):
                     index.add_item(i, vector)
                 index.build(self.annoy_num_trees)
-                index.save(file_name)
+                try:
+                    index.save(file_name)
+                except OSError as e:
+                    print(f"An error occurred: {e}. Annoy file is probably already in use.")
         return index
 
     def get_closest_match(self, vector):
