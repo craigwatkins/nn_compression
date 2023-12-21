@@ -23,11 +23,12 @@ def decompress_image(save_path):
 def demo():
     crop_size = 250
     crop_offset = 150
-    image = "15"
+    crop_image = False
+    image = "05"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
     error_threshold = 5.5
-    make_reference_image(source_path, crop_size, crop_offset, crop_image=True)
+    make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 
     print("compressing image")
     compressed = NNCompressor()
@@ -36,6 +37,7 @@ def demo():
     save_image(compressed.compressed_values, "images/test/test.png")
     del compressed
     decompress_image(save_path)
+
 
     psnr_v = calculate_psnr("images/test/reference.png", "images/test/test.png")
     print("vector psnr", psnr_v)

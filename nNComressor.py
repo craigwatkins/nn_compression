@@ -18,7 +18,7 @@ class NNCompressor:
         Description: This method is used to initialize the class variables.
         """
         self.lookup_table = self.get_lookup_table()
-        self.match_counter = [0] * len(self.lookup_table.set_list)
+        self.match_counter = [0] * (len(self.lookup_table.set_list) + 1)
         self.original_values = np.array([])
         self.compressed_values = np.array([])
         self.compressed_indexes = []
@@ -126,30 +126,13 @@ class NNCompressor:
                 # if the difference is too large, move on to the next smaller vector size
                 # the odds of finding a good match are low and this will save time
                 continue
-            if block_size == 3 and col_idx > 0 and self.row_idx > 1 and 1 == 0:
-                # find the paeth, average and left
-                # paeth = left + above - above_left
-                left = self.compressed_values[self.row_idx, col_idx-3:col_idx]
-                above = self.compressed_values[self.row_idx-1, col_idx:col_idx+3]
-                above_left = self.compressed_values[self.row_idx-1, col_idx-3:col_idx]
-                paeth = left + above - above_left
-                average = (left + above) // 2
-                current_block = self.original_values[self.row_idx, col_idx:col_idx+3]
-                paeth_error = np.linalg.norm(paeth - current_block)
-                average_error = np.linalg.norm(average - current_block)
-                left_error = np.linalg.norm(left - current_block)
-                # error_adjustments = [paeth - above, average - above, left - above]
-                # find the index of the smallest error
-                min_error_idx = np.argmin([paeth_error, average_error, left_error])
-                min_error = [paeth_error, average_error, left_error][min_error_idx]
-                if min_error < self.error_threshold:
-                    self.specials[min_error_idx][0] += 1
-                    closest_index = min_error_idx
-                    self.compressed_indexes.append(closest_index)
-                    adjusted_match = above - [paeth, average, left][min_error_idx]
-                    return adjusted_match, 3
-
-            closest_match, closest_index = tuple(a_set.set_index.get_closest_match(diff))
+            # if the block_size is only one pixel (r,g,b), look for special values
+            # skip the first row and column to ensure that all values are available
+            if block_size == 3 and col_idx > 0 and self.row_idx > 0:
+                special_match = self.find_special_match(col_idx)
+                if len(special_match) > 0:
+                    return special_match, block_size
+            closest_match = tuple(a_set.set_index.get_closest_match(diff))
             closest_index = self.lookup_table.index_dict[tuple(closest_match)]
             error = np.linalg.norm(diff - np.array(closest_match))
             under_threshold = error < self.error_threshold
@@ -162,6 +145,33 @@ class NNCompressor:
         self.match_counter[i] += 1
         self.compressed_indexes.append(closest_index)
         return closest_match, block_size
+
+    def find_special_match(self, col_idx):
+        # returns the special match if one is under the error threshold, otherwise returns an empty array
+        # find the paeth, average and left
+        left = self.compressed_values[self.row_idx, col_idx - 3:col_idx]
+        above = self.compressed_values[self.row_idx - 1, col_idx:col_idx + 3]
+        above_left = self.compressed_values[self.row_idx - 1, col_idx - 3:col_idx]
+        current_pixel = self.original_values[self.row_idx, col_idx:col_idx + 3]
+        paeth = left + above - above_left
+        average = (left + above) // 2
+        paeth_error = np.linalg.norm(paeth - current_pixel)
+        average_error = np.linalg.norm(average - current_pixel)
+        left_error = np.linalg.norm(left - current_pixel)
+        specials = [paeth, average, left]
+        special_errors = [paeth_error, average_error, left_error]
+        # find the smallest error and its index
+        min_error_idx = np.argmin(special_errors)
+        min_error = special_errors[min_error_idx]
+        if min_error < self.error_threshold:
+            self.specials[min_error_idx][0] += 1
+            closest_index = min_error_idx
+            self.compressed_indexes.append(closest_index)
+            adjusted_match = above - specials[min_error_idx]
+            return adjusted_match
+        else:
+            return np.array([])
+
 
     def huff_compress(self):
         """
@@ -232,6 +242,8 @@ class NNCompressor:
         header_values = header_obj.decompress_header_values(header)
         self.height = header_values['height']
         self.width = header_values['width']
+        self.clip_min = header_values['clip_min']
+        self.clip_max = header_values['clip_max']
         compressed_bit_length = header_values['length']
         uncompressed_bit_size = header_values['uncompressed_bit_size']
         first_bits = full_file[header_length:header_length+compressed_bit_length]
@@ -270,7 +282,7 @@ class NNCompressor:
                     self.approximate_top_values(row_idx, col_idx, decompressed_values)
                 match = matches[match_idx]
                 if len(match) == 1:
-                    # if the match is a special value, use it as the index for the lookup table
+                    # if the match is a special value, calculate the special value from surrounding values
                     block_size = 3
                     above = decompressed_values[row_idx-1, col_idx:col_idx+3]
                     left = decompressed_values[row_idx, col_idx-3:col_idx]

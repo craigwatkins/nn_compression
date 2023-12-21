@@ -55,5 +55,4 @@ class SetIndex:
     def get_closest_match(self, vector):
         if self.index_type == 'annoy':
             index = self.index.get_nns_by_vector(vector, 1)
-            return self.sorted_values[index[0]], index[0]
-
+            return self.sorted_values[index[0]]
