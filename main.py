@@ -21,13 +21,13 @@ def decompress_image(save_path):
 
 
 def demo():
-    crop_size = 250
+    crop_size = 450
     crop_offset = 150
-    crop_image = False
-    image = "05"
+    crop_image = True
+    image = "19"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
-    error_threshold = 5.5
+    error_threshold = 4
     make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 
     print("compressing image")

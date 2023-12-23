@@ -1,5 +1,6 @@
 import numpy as np
 import cv2 as cv
+import time
 
 from huffman_compression import HuffmanCoding
 import padded_binary as pb
@@ -36,7 +37,6 @@ class NNCompressor:
         self.row_idx = 0
         self.specials = [[0], [0], [0]]
 
-
     def get_lookup_table(self):
         """
         Description: This method is used to get the lookup tables.
@@ -59,7 +59,10 @@ class NNCompressor:
         self.height = self.original_values.shape[0]
         self.width = self.original_values.shape[1]
 
+        start = time.time()
         self.get_best_matches()
+        end = time.time()
+        print("time to get best matches", end - start)
         print("specials:", self.specials)
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
@@ -69,10 +72,11 @@ class NNCompressor:
                                           self.compressed_length, self.uncompressed_bit_size,
                                           self.clip_min, self.clip_max])
         # save the compressed image
-        pb.write_padded_bytes(header+image_data, self.compressed_path)
+        pb.write_padded_bytes(header + image_data, self.compressed_path)
         print("match counter:", self.match_counter)
         # reshape compressed values for image display
-        self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0], self.compressed_values.shape[1]//3, 3)
+        self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
+                                                                self.compressed_values.shape[1] // 3, 3)
         return self.compressed_values
 
     def preprocess_image(self, source_path):
@@ -113,6 +117,7 @@ class NNCompressor:
         block_size = 0
         closest_match = None
         closest_index = None
+        return_match = False
         i = 0
         for i, a_set in enumerate(self.lookup_table.set_list):
             block_size = a_set.block_size
@@ -120,12 +125,7 @@ class NNCompressor:
                 # if the there isn't enough room for a vector of this size to fit in the row
                 # move on to the next smaller block size
                 continue
-            diff = row_diffs[col_idx:col_idx+block_size]
-            diff_size = np.linalg.norm(diff)
-            if diff_size > self.error_threshold*block_size and block_size > 9:
-                # if the difference is too large, move on to the next smaller vector size
-                # the odds of finding a good match are low and this will save time
-                continue
+            diff = row_diffs[col_idx:col_idx + block_size]
             # if the block_size is only one pixel (r,g,b), look for special values
             # skip the first row and column to ensure that all values are available
             if block_size == 3 and col_idx > 0 and self.row_idx > 0:
@@ -133,18 +133,19 @@ class NNCompressor:
                 if len(special_match) > 0:
                     return special_match, block_size
             closest_match = tuple(a_set.set_index.get_closest_match(diff))
-            closest_index = self.lookup_table.index_dict[tuple(closest_match)]
-            error = np.linalg.norm(diff - np.array(closest_match))
-            under_threshold = error < self.error_threshold
-            if under_threshold:
+            if block_size == 3:
+                closest_index = self.lookup_table.index_dict[tuple(closest_match)]
+                return_match = True
+            else:
+                closest_index = self.lookup_table.index_dict[tuple(closest_match)]
+                error = np.linalg.norm(diff - np.array(closest_match))
+                return_match = error < self.error_threshold
+            if return_match:
                 self.match_counter[i] += 1
                 self.compressed_indexes.append(closest_index)
                 return closest_match, block_size
             else:
                 continue
-        self.match_counter[i] += 1
-        self.compressed_indexes.append(closest_index)
-        return closest_match, block_size
 
     def find_special_match(self, col_idx):
         # returns the special match if one is under the error threshold, otherwise returns an empty array
@@ -153,13 +154,11 @@ class NNCompressor:
         above = self.compressed_values[self.row_idx - 1, col_idx:col_idx + 3]
         above_left = self.compressed_values[self.row_idx - 1, col_idx - 3:col_idx]
         current_pixel = self.original_values[self.row_idx, col_idx:col_idx + 3]
-        paeth = left + above - above_left
-        average = (left + above) // 2
-        paeth_error = np.linalg.norm(paeth - current_pixel)
-        average_error = np.linalg.norm(average - current_pixel)
-        left_error = np.linalg.norm(left - current_pixel)
+        above_and_left = left + above
+        paeth = above_and_left - above_left
+        average = above_and_left // 2
         specials = [paeth, average, left]
-        special_errors = [paeth_error, average_error, left_error]
+        special_errors = np.linalg.norm(specials - current_pixel, axis=1)
         # find the smallest error and its index
         min_error_idx = np.argmin(special_errors)
         min_error = special_errors[min_error_idx]
@@ -171,7 +170,6 @@ class NNCompressor:
             return adjusted_match
         else:
             return np.array([])
-
 
     def huff_compress(self):
         """
@@ -221,9 +219,13 @@ class NNCompressor:
         max_block_size = self.lookup_table.max_block_size
         if self.width - col_idx < max_block_size:
             max_block_size = self.width - col_idx
-        values = destination_values[row_idx, col_idx - 3:col_idx].tolist()  # get the previous three values
+        if col_idx == 0:
+            # if we're at the beginning of the row, use the default row value
+            values = [self.DEFAULT_ROW_VALUE] * 3
+        else:
+            values = destination_values[row_idx, col_idx - 3:col_idx].tolist()  # get the previous three values
         # fill neighbors with values from previous row, values is a list of three values that are repeated to fill
-        approximate_neighbors = [values[j] for i in range(max_block_size//3) for j in range(3)]
+        approximate_neighbors = [values[j] for i in range(max_block_size // 3) for j in range(3)]
         destination_values[row_idx - 1, col_idx:col_idx + max_block_size] = approximate_neighbors
 
     def decompress(self, file_name=''):
@@ -246,19 +248,21 @@ class NNCompressor:
         self.clip_max = header_values['clip_max']
         compressed_bit_length = header_values['length']
         uncompressed_bit_size = header_values['uncompressed_bit_size']
-        first_bits = full_file[header_length:header_length+compressed_bit_length]
+        first_bits = full_file[header_length:header_length + compressed_bit_length]
         huff = HuffmanCoding()
         first_bits = huff.decompress_file(first_bits)
-        uncompressed_bits = full_file[header_length+compressed_bit_length:]
+        uncompressed_bits = full_file[header_length + compressed_bit_length:]
         decompressed_indexes = first_bits
         if uncompressed_bits:
             compressed_bit_size = len(bin(max(first_bits))[2:])
             # convert the integers to bits and pad them with 0s if necessary to make them all the same length (bit_size)
             decompressed_first_bits = [bin(x)[2:].zfill(compressed_bit_size) for x in first_bits]
             # break the remaining bits into groups of remaining_match_bit_size bits
-            uncompressed_bits = [uncompressed_bits[i:i + uncompressed_bit_size] for i in range(0, len(uncompressed_bits), uncompressed_bit_size)]
+            uncompressed_bits = [uncompressed_bits[i:i + uncompressed_bit_size] for i in
+                                 range(0, len(uncompressed_bits), uncompressed_bit_size)]
             # combine decompressed_first_bits and remaining_matches_bits into a single list
-            decompressed = [decompressed_first_bits[i] + uncompressed_bits[i] for i in range(len(decompressed_first_bits))]
+            decompressed = [decompressed_first_bits[i] + uncompressed_bits[i] for i in
+                            range(len(decompressed_first_bits))]
             # convert to decimal
             decompressed_indexes = [int(x, 2) for x in decompressed]
         # convert to vectors
@@ -284,21 +288,22 @@ class NNCompressor:
                 if len(match) == 1:
                     # if the match is a special value, calculate the special value from surrounding values
                     block_size = 3
-                    above = decompressed_values[row_idx-1, col_idx:col_idx+3]
-                    left = decompressed_values[row_idx, col_idx-3:col_idx]
-                    above_left = decompressed_values[row_idx-1, col_idx-3:col_idx]
+                    above = decompressed_values[row_idx - 1, col_idx:col_idx + 3]
+                    left = decompressed_values[row_idx, col_idx - 3:col_idx]
+                    above_left = decompressed_values[row_idx - 1, col_idx - 3:col_idx]
                     paeth = left + above - above_left
                     average = (left + above) // 2
                     specials = [paeth, average, left]
                     match = above - specials[match[0]]
                 else:
                     block_size = len(match)
-                decompressed_values[row_idx, col_idx:col_idx+block_size] = np.clip(decompressed_values[row_idx-1,
-                                                                                   col_idx:col_idx+block_size] - np.array(match),
-                                                                                   self.clip_min, self.clip_max)
+                decompressed_values[row_idx, col_idx:col_idx + block_size] = np.clip(decompressed_values[row_idx - 1,
+                                                                                     col_idx:col_idx + block_size] - np.array(match),
+                                                                                     self.clip_min, self.clip_max)
                 col_idx += block_size
                 match_idx += 1
         # delete the first row of decompressed_values
         decompressed_values = np.delete(decompressed_values, 0, axis=0)
         # reshape to 3 channels for image display
-        self.decompressed_values = decompressed_values.reshape(decompressed_values.shape[0], decompressed_values.shape[1]//3, 3)
+        self.decompressed_values = decompressed_values.reshape(decompressed_values.shape[0],
+                                                               decompressed_values.shape[1] // 3, 3)

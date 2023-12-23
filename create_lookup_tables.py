@@ -5,7 +5,7 @@ from indexedSet import IndexedSet
 
 def create_lookup_table():
     print("making lookup table")
-    use_saved_index = True
+    use_saved_index = False
     sample_sets = lookup_db.retrieve_sets()
     # remove the last elements of the last set to make room for special values
     sample_sets[-1] = sample_sets[-1][:-3]

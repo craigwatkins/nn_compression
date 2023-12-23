@@ -17,7 +17,7 @@ class SetIndex:
         create_index: creates index for set
         get_closest_match: returns closest match to a given vector
     """
-    def __init__(self, sorted_values, set_list_index, index_type='annoy', annoy_num_trees=30, index_offset=0, use_saved_index=False):
+    def __init__(self, sorted_values, set_list_index, index_type='annoy', annoy_num_trees=20, index_offset=0, use_saved_index=False):
         # convert sorted_values to numpy array
         self.sorted_values = np.array(sorted_values)
         self.block_size = len(sorted_values[0])
