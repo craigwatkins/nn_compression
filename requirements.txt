@@ -1,3 +1,4 @@
 opencv-python~=4.8.1.78
 numpy~=1.26.2
 annoy~=1.17.3
+scipy~=1.7.3

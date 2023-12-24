@@ -1,6 +1,7 @@
 import numpy as np
 import cv2 as cv
 import time
+from scipy.spatial import KDTree
 
 from huffman_compression import HuffmanCoding
 import padded_binary as pb
@@ -36,6 +37,9 @@ class NNCompressor:
         self.compressed_path = ''
         self.row_idx = 0
         self.specials = [[0], [0], [0]]
+        self.one_pixel_set = self.lookup_table.set_list[-1].vectors
+        self.kd_tree = KDTree(self.one_pixel_set)
+        self.row_matches = []
 
     def get_lookup_table(self):
         """
@@ -101,6 +105,8 @@ class NNCompressor:
             self.row_idx = row_idx
             col_idx = 0
             row_diffs = self.compressed_values[row_idx - 1, :] - self.original_values[row_idx, :]
+            if row_idx > 1:
+                self.get_row_matches(row_diffs)
             while col_idx < self.width:
                 if row_idx == 1 and col_idx > 0:
                     # generate values for the first (extra) row of compressed_values so that actual values can be
@@ -113,11 +119,35 @@ class NNCompressor:
                 self.compressed_values[row_idx, col_idx:col_idx + size] = np.clip(neighbors - np.array(match), self.clip_min, self.clip_max)
                 col_idx += size
 
+    def get_row_matches(self, row_diffs):
+        """
+        Description: This method is used to find the closest match in the lookup table for each pixel
+        in the current row (self.row_matches). It uses a KDTree to find the best match.
+        :param row_diffs: differences between the actual values of the current row and the
+        approximated values of the previous row
+        :return: None
+        """
+        row_diffs = [row_diffs[i:i + 3] for i in range(0, len(row_diffs), 3)]
+        distances, indices = self.kd_tree.query(row_diffs)
+        # Convert indices to actual points from setB
+        self.row_matches = [self.one_pixel_set[index] for index in indices]
+
     def get_match(self, col_idx, row_diffs):
+        """
+        Description: This method is used to find the closest match in the lookup table for a given vector.
+        It tries to find the largest match possible, starting with the largest block size and moving down
+        to the smallest block size.
+        :param col_idx: column index of the current pixel
+        :param row_diffs: differences between the actual values of the current row
+        and the approximated values of the previous row
+        :return:
+            closest_match: the closest match in the lookup table
+            block_size: the size of the block that was matched
+        """
         block_size = 0
         closest_match = None
         closest_index = None
-        return_match = False
+        return_the_match = False
         i = 0
         for i, a_set in enumerate(self.lookup_table.set_list):
             block_size = a_set.block_size
@@ -132,15 +162,23 @@ class NNCompressor:
                 special_match = self.find_special_match(col_idx)
                 if len(special_match) > 0:
                     return special_match, block_size
-            closest_match = tuple(a_set.set_index.get_closest_match(diff))
-            if block_size == 3:
-                closest_index = self.lookup_table.index_dict[tuple(closest_match)]
-                return_match = True
+            if block_size == 3 and self.row_idx > 1:
+                # row_matches are only generated for 1 pixel blocks after the first row
+                # and here we can simply get the appropriate match from the row_matches list
+                closest_match = self.row_matches[col_idx // 3]
+                closest_index = self.lookup_table.index_dict[closest_match]
+                return_the_match = True
             else:
-                closest_index = self.lookup_table.index_dict[tuple(closest_match)]
+                # we either have a multi-pixel block or we're in the first row
+                closest_match = tuple(a_set.set_index.get_closest_match(diff))
+                closest_index = self.lookup_table.index_dict[closest_match]
                 error = np.linalg.norm(diff - np.array(closest_match))
-                return_match = error < self.error_threshold
-            if return_match:
+                if block_size > 3:
+                    return_the_match = error < self.error_threshold
+                else:
+                    # we won't find a better match after this, so return the match regardless of error
+                    return_the_match = True
+            if return_the_match:
                 self.match_counter[i] += 1
                 self.compressed_indexes.append(closest_index)
                 return closest_match, block_size
