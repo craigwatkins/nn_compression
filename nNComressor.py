@@ -185,7 +185,22 @@ class NNCompressor:
             else:
                 continue
 
+    def paeth_predictor(self, left, above, upper_left):
+        """
+        Description: This method is used to calculate the paeth value for a given vector.
+        :param left: left vector
+        :param above: above vector
+        :param upper_left: upper left vector
+        :return: the paeth value
+        """
+        p = left + above - upper_left
+        pa = abs(p - left)
+        pb = abs(p - above)
+        pc = abs(p - upper_left)
+        return np.where((pa <= pb) & (pa <= pc), left, np.where(pb <= pc, above, upper_left))
+
     def find_special_match(self, col_idx):
+
         # returns the special match if one is under the error threshold, otherwise returns an empty array
         # find the paeth, average and left
         left = self.compressed_values[self.row_idx, col_idx - 3:col_idx]
@@ -193,7 +208,7 @@ class NNCompressor:
         above_left = self.compressed_values[self.row_idx - 1, col_idx - 3:col_idx]
         current_pixel = self.original_values[self.row_idx, col_idx:col_idx + 3]
         above_and_left = left + above
-        paeth = above_and_left - above_left
+        paeth = self.paeth_predictor(left, above, above_left)
         average = above_and_left // 2
         specials = [paeth, average, left]
         special_errors = np.linalg.norm(specials - current_pixel, axis=1)
@@ -329,7 +344,7 @@ class NNCompressor:
                     above = decompressed_values[row_idx - 1, col_idx:col_idx + 3]
                     left = decompressed_values[row_idx, col_idx - 3:col_idx]
                     above_left = decompressed_values[row_idx - 1, col_idx - 3:col_idx]
-                    paeth = left + above - above_left
+                    paeth = self.paeth_predictor(left, above, above_left)
                     average = (left + above) // 2
                     specials = [paeth, average, left]
                     match = above - specials[match[0]]
