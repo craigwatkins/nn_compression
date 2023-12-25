@@ -163,7 +163,7 @@ class NNCompressor:
                 if len(special_match) > 0:
                     return special_match, block_size
             if block_size == 3 and self.row_idx > 1:
-                # row_matches are only generated for 1 pixel blocks after the first row
+                # row_matches are only bulk generated for 1 pixel blocks after the first row
                 # and here we can simply get the appropriate match from the row_matches list
                 closest_match = self.row_matches[col_idx // 3]
                 closest_index = self.lookup_table.index_dict[closest_match]
@@ -172,8 +172,8 @@ class NNCompressor:
                 # we either have a multi-pixel block or we're in the first row
                 closest_match = tuple(a_set.set_index.get_closest_match(diff))
                 closest_index = self.lookup_table.index_dict[closest_match]
-                error = np.linalg.norm(diff - np.array(closest_match))
                 if block_size > 3:
+                    error = np.linalg.norm(diff - np.array(closest_match))
                     return_the_match = error < self.error_threshold
                 else:
                     # we won't find a better match after this, so return the match regardless of error
