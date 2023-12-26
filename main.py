@@ -27,7 +27,7 @@ def demo():
     image = "19"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
-    error_threshold = 4
+    error_threshold = 0
     make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 
     print("compressing image")

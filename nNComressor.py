@@ -40,6 +40,8 @@ class NNCompressor:
         self.one_pixel_set = self.lookup_table.set_list[-1].vectors
         self.kd_tree = KDTree(self.one_pixel_set)
         self.row_matches = []
+        self.row_predictors = []
+        self.compressed_row_predictors = []
 
     def get_lookup_table(self):
         """
@@ -66,6 +68,7 @@ class NNCompressor:
         start = time.time()
         self.get_best_matches()
         end = time.time()
+
         print("time to get best matches", end - start)
         print("specials:", self.specials)
         # remove the top row of compressed_values, it's not actually part of the image
@@ -81,17 +84,19 @@ class NNCompressor:
         # reshape compressed values for image display
         self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
                                                                 self.compressed_values.shape[1] // 3, 3)
+        self.compressed_row_predictors = self.get_row_predictors(self.compressed_values)
         return self.compressed_values
 
     def preprocess_image(self, source_path):
-        img = cv.imread(source_path)
+        img = cv.imread(source_path).astype(np.int32)
+        self.row_predictors = self.get_row_predictors(img)
         # flatten rgb channels into each row   [r1,g1,b1,r2,g2,b2,...]
         combined_channels = img.reshape(img.shape[0], -1)
         # add an extra row at the top of combined_channels
         # this aligns it with the rows in the compressed_values array
         combined_channels = np.insert(combined_channels, 0, self.DEFAULT_ROW_VALUE, axis=0)
         # convert original values to avoid overflow errors
-        self.original_values = combined_channels.astype(np.int32)
+        self.original_values = combined_channels
 
     def get_best_matches(self):
         """
@@ -105,8 +110,8 @@ class NNCompressor:
             self.row_idx = row_idx
             col_idx = 0
             row_diffs = self.compressed_values[row_idx - 1, :] - self.original_values[row_idx, :]
-            if row_idx > 1:
-                self.get_row_matches(row_diffs)
+            #if row_idx > 1:
+                #self.get_row_matches(row_diffs)
             while col_idx < self.width:
                 if row_idx == 1 and col_idx > 0:
                     # generate values for the first (extra) row of compressed_values so that actual values can be
@@ -115,7 +120,26 @@ class NNCompressor:
                     row_diffs[col_idx:col_idx + max_block_size] = self.compressed_values[row_idx - 1, col_idx:col_idx + max_block_size] - self.original_values[row_idx, col_idx:col_idx + max_block_size]
                 match, size = self.get_match(col_idx, row_diffs)
                 self.matches.append(match)
-                neighbors = np.array(self.compressed_values[row_idx - 1, col_idx:col_idx + size])
+                if row_idx > 1 and col_idx > 0 and size == 3:
+                    row_predictor = self.row_predictors[self.row_idx - 2]
+                    above = self.compressed_values[self.row_idx - 1, col_idx:col_idx + 3]
+                    left = self.compressed_values[self.row_idx, col_idx - 3:col_idx]
+                    above_left = self.compressed_values[self.row_idx - 1, col_idx - 3:col_idx]
+                    if row_predictor == 0:
+                        # get the top diff
+                        neighbors = above
+                    elif row_predictor == 1:
+                        # get the left diff
+                        neighbors = left
+                    elif row_predictor == 2:
+                        # get the average diff
+                        neighbors = (above + left) // 2
+                    else:
+                        # get the paeth diff
+                        neighbors = self.paeth_predictor(left, above, above_left)
+                else:
+
+                    neighbors = np.array(self.compressed_values[row_idx - 1, col_idx:col_idx + size])
                 self.compressed_values[row_idx, col_idx:col_idx + size] = np.clip(neighbors - np.array(match), self.clip_min, self.clip_max)
                 col_idx += size
 
@@ -149,41 +173,63 @@ class NNCompressor:
         closest_index = None
         return_the_match = False
         i = 0
+        # top, left, average, paeth
+
         for i, a_set in enumerate(self.lookup_table.set_list):
             block_size = a_set.block_size
             if col_idx + block_size > self.width:
                 # if the there isn't enough room for a vector of this size to fit in the row
                 # move on to the next smaller block size
                 continue
-            diff = row_diffs[col_idx:col_idx + block_size]
+            if col_idx > 0 and self.row_idx > 1 and block_size == 3:
+                diff = self.get_diff(col_idx, block_size)
+            else:
+                diff = row_diffs[col_idx:col_idx + block_size]
             # if the block_size is only one pixel (r,g,b), look for special values
             # skip the first row and column to ensure that all values are available
-            if block_size == 3 and col_idx > 0 and self.row_idx > 0:
-                special_match = self.find_special_match(col_idx)
-                if len(special_match) > 0:
-                    return special_match, block_size
-            if block_size == 3 and self.row_idx > 1:
-                # row_matches are only bulk generated for 1 pixel blocks after the first row
-                # and here we can simply get the appropriate match from the row_matches list
-                closest_match = self.row_matches[col_idx // 3]
-                closest_index = self.lookup_table.index_dict[closest_match]
-                return_the_match = True
+            #if block_size == 3 and col_idx > 0 and self.row_idx > 0:
+                #special_match = self.find_special_match(col_idx)
+                #if len(special_match) > 0:
+                    #return special_match, block_size
+            closest_match = tuple(a_set.set_index.get_closest_match(diff))
+            closest_index = self.lookup_table.index_dict[closest_match]
+            if block_size > 3:
+                error = np.linalg.norm(diff - np.array(closest_match))
+                return_the_match = error < self.error_threshold
             else:
-                # we either have a multi-pixel block or we're in the first row
-                closest_match = tuple(a_set.set_index.get_closest_match(diff))
-                closest_index = self.lookup_table.index_dict[closest_match]
-                if block_size > 3:
-                    error = np.linalg.norm(diff - np.array(closest_match))
-                    return_the_match = error < self.error_threshold
-                else:
-                    # we won't find a better match after this, so return the match regardless of error
-                    return_the_match = True
+                # we won't find a better match after this, so return the match regardless of error
+                return_the_match = True
             if return_the_match:
                 self.match_counter[i] += 1
                 self.compressed_indexes.append(closest_index)
                 return closest_match, block_size
             else:
                 continue
+
+    def get_diff(self, col_idx, block_size):
+        row_predictor = self.row_predictors[self.row_idx-2]
+        # 0:top, 1:left, 2:average, 3:paeth
+        above = self.compressed_values[self.row_idx - 1, col_idx:col_idx + block_size]
+        left = self.compressed_values[self.row_idx, col_idx - 3:col_idx]
+        above_left = self.compressed_values[self.row_idx - 1, col_idx - 3:col_idx]
+        current_pixel = self.original_values[self.row_idx, col_idx:col_idx + block_size]
+        if row_predictor == 0:
+            # get the top diff
+            diff = above - current_pixel
+        elif row_predictor == 1:
+            # get the left diff
+            diff = left - current_pixel
+        elif row_predictor == 2:
+            # get the average diff
+            diff = (above + left) // 2 - current_pixel
+        else:
+            # get the paeth diff
+            paeth = self.paeth_predictor(left, above, above_left)
+            diff = paeth - current_pixel
+        return diff
+
+
+
 
     def paeth_predictor(self, left, above, upper_left):
         """
@@ -199,8 +245,58 @@ class NNCompressor:
         pc = abs(p - upper_left)
         return np.where((pa <= pb) & (pa <= pc), left, np.where(pb <= pc, above, upper_left))
 
-    def find_special_match(self, col_idx):
+    def get_row_predictors(self, image):
+        # Calculate the differences for each method
+        """
+        The output is a list where each element represents the best method
+        (0 for top, 1 for left, 2 for average, 3 for paeth) for each row of the image.
+        :param image:
+        :return:
+        """
 
+        def top_diff(img):
+            top = np.abs(img[1:] - img[:-1])
+            return top[:, 1:]  # remove left column from top
+
+        def left_diff(img):
+            left = np.abs(img[:, 1:] - img[:, :-1])
+            return left[1:, :]  # remove top row from left
+
+        def average_diff(img):
+            top = img[:-1]
+            left = img[:, :-1]
+            return np.abs(img[1:, 1:] - (top[:, 1:] + left[1:]) / 2)
+
+        def paeth_predictor(a, b, c):
+            p = a + b - c
+            pa = abs(p - a)
+            pb = abs(p - b)
+            pc = abs(p - c)
+            return np.where((pa <= pb) & (pa <= pc), a, np.where(pb <= pc, b, c))
+
+        def paeth_diff(img):
+            a = img[1:, :-1]  # Left
+            b = img[:-1, 1:]  # Above
+            c = img[:-1, :-1]  # Upper left
+            return np.abs(img[1:, 1:] - paeth_predictor(a, b, c))
+
+        # Calculate differences
+        top = top_diff(image)
+        left = left_diff(image)
+        average = average_diff(image)
+        paeth = paeth_diff(image)
+        # Find best method for each row
+        best_method = []
+        best = 0
+        for i in range(0, top.shape[0]):
+            sums = [np.sum(top[i]), np.sum(left[i]), np.sum(average[i]), np.sum(paeth[i])]
+            min = np.argmin(sums)
+            best += sums[min]
+            best_method.append(np.argmin(sums))
+        print(best / (top.shape[0] * top.shape[1]))
+        return best_method
+
+    def find_special_match(self, col_idx):
         # returns the special match if one is under the error threshold, otherwise returns an empty array
         # find the paeth, average and left
         left = self.compressed_values[self.row_idx, col_idx - 3:col_idx]
