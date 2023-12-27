@@ -23,7 +23,7 @@ def decompress_image(save_path):
 def demo():
     crop_size = 450
     crop_offset = 150
-    crop_image = True
+    crop_image = False
     image = "19"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""

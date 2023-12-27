@@ -93,7 +93,7 @@ class NNCompressor:
         # convert original values to avoid overflow errors
         self.original_values = combined_channels.astype(np.int32)
 
-    def get_best_matches(self):
+    def get_best_matches_old(self):
         """
         Description: This method is used to iterate over the image and find the difference between the actual values of
         the current row and the approximated values of the previous row. The differences are approximated by finding the closest match in the lookup table.
@@ -118,6 +118,35 @@ class NNCompressor:
                 neighbors = np.array(self.compressed_values[row_idx - 1, col_idx:col_idx + size])
                 self.compressed_values[row_idx, col_idx:col_idx + size] = np.clip(neighbors - np.array(match), self.clip_min, self.clip_max)
                 col_idx += size
+
+    def get_best_matches(self):
+        top_diffs = self.original_values[1:] - self.original_values[:-1]
+
+        top_diffs = top_diffs.flatten()
+        # get the sum of the absolute values of top_diffs
+        top_diff_sum = np.sum(np.abs(top_diffs))
+        print("top diff sum", top_diff_sum)
+
+        top_diffs = [top_diffs[i:i + 3] for i in range(0, len(top_diffs), 3)]
+        distances, indices = self.kd_tree.query(top_diffs)
+        # Convert indices to actual points from setB
+        self.row_matches = [self.one_pixel_set[index] for index in indices]
+        # reshape into rows
+        #self.row_matches = np.array(self.row_matches).reshape(self.original_values.shape[0] - 1, -1)
+        new_diffs = top_diffs - np.array(self.row_matches)
+        new_diffs = new_diffs.flatten()
+        # get the sum of the absolute values of new_diffs
+        new_diff_sum = np.sum(np.abs(new_diffs))
+        # get the maximum of the absolute values of new_diffs
+        new_diff_max = np.max(np.abs(new_diffs))
+        new_diffs = [x + new_diff_max for x in new_diffs]
+        huff = HuffmanCoding()
+        huff_compressed, encoded_list = huff.compress(new_diffs)
+
+
+        print("huff compressed size", len(huff_compressed)/8)
+        print('hi')
+
 
     def get_row_matches(self, row_diffs):
         """
