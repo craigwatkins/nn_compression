@@ -120,32 +120,57 @@ class NNCompressor:
                 col_idx += size
 
     def get_best_matches(self):
+        def average_diff(img):
+            top = img[:-1]
+            left = img[:, :-1]
+            return img[1:, 1:] - (top[:, 1:] + left[1:]) // 2
         top_diffs = self.original_values[1:] - self.original_values[:-1]
 
-        top_diffs = top_diffs.flatten()
-        # get the sum of the absolute values of top_diffs
-        top_diff_sum = np.sum(np.abs(top_diffs))
-        print("top diff sum", top_diff_sum)
+        average_diffs = self.original_values.flatten()
+        average_diffs = [average_diffs[i:i + 3] for i in range(0, len(average_diffs), 3)]
+        # reshape to original height and width
+        average_diffs = np.array(average_diffs).reshape(self.original_values.shape[0], self.original_values.shape[1]//3, 3)
+        average_diffs = average_diff(average_diffs)
+        top_diffs_pixels = top_diffs.flatten()
+        top_diffs_pixels = np.array(top_diffs).reshape(self.original_values.shape[0]-1, self.original_values.shape[1]//3, 3)
+        # get the leftmost column of top_diffs_pixels
+        left_column = top_diffs_pixels[:, 0]
+        # add it as the leftmost column of average_diffs
+        average_diffs = np.insert(average_diffs, 0, left_column, axis=1)
+        average_diffs = average_diffs.flatten()
 
-        top_diffs = [top_diffs[i:i + 3] for i in range(0, len(top_diffs), 3)]
+        top_diffs = top_diffs.flatten()
+
+        # get the sum of the absolute values of top_diffs
+        top_diff_sum = np.sum(np.abs(average_diffs))
+        print("top diff sum", top_diff_sum)
+        #  break them into r,g,b sized blocks
+        top_diffs = [average_diffs[i:i + 3] for i in range(0, len(average_diffs), 3)]
         distances, indices = self.kd_tree.query(top_diffs)
         # Convert indices to actual points from setB
         self.row_matches = [self.one_pixel_set[index] for index in indices]
         # reshape into rows
         #self.row_matches = np.array(self.row_matches).reshape(self.original_values.shape[0] - 1, -1)
         new_diffs = top_diffs - np.array(self.row_matches)
+        new_diffs_set = set(tuple(x) for x in new_diffs)
         new_diffs = new_diffs.flatten()
         # get the sum of the absolute values of new_diffs
         new_diff_sum = np.sum(np.abs(new_diffs))
         # get the maximum of the absolute values of new_diffs
-        new_diff_max = np.max(np.abs(new_diffs))
-        new_diffs = [x + new_diff_max for x in new_diffs]
+        new_diff_max = np.max(new_diffs)
+        new_diff_min = np.min(new_diffs)
+        new_diff_size = new_diff_max - new_diff_min
+        new_diffs = [x + abs(new_diff_min) for x in new_diffs]
+        # seperate into r,g,b channels
+        reds = new_diffs[::3]
+        greens = new_diffs[1::3]
+        blues = new_diffs[2::3]
+        big_indexed = np.array(reds)*new_diff_size**2 + np.array(greens)*new_diff_size + np.array(blues)
         huff = HuffmanCoding()
-        huff_compressed, encoded_list = huff.compress(new_diffs)
-
-
+        huff_compressed, encoded_list = huff.compress(big_indexed)
         print("huff compressed size", len(huff_compressed)/8)
         print('hi')
+
 
 
     def get_row_matches(self, row_diffs):
