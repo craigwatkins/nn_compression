@@ -2,6 +2,8 @@ import numpy as np
 import cv2 as cv
 import time
 from scipy.spatial import KDTree
+from numba import jit
+
 
 from huffman_compression import HuffmanCoding
 import padded_binary as pb
@@ -54,7 +56,10 @@ class NNCompressor:
         """
         self.compressed_path = compressed_path
         self.error_threshold = error_threshold
+        start = time.time()
         self.preprocess_image(source_path)
+        end = time.time()
+        print("time to preprocess", end - start)
         self.compressed_values = np.zeros(self.original_values.shape, dtype=np.int32)
         # add an extra row at the top of compressed_values so that it can provide a basis for the first row
         self.compressed_values[0, :] = self.DEFAULT_ROW_VALUE
@@ -85,13 +90,30 @@ class NNCompressor:
 
     def preprocess_image(self, source_path):
         img = cv.imread(source_path)
+        top_diffs = img[1:] - img[:-1]
+        top_diff_sizes = np.linalg.norm(top_diffs, axis=2).flatten()
+        threshold_mults = [2, 2, 2, 2, 16, 30, 24, 0]
+
+        block_index_sets = []
+        for i, a_set in enumerate(self.lookup_table.set_list):
+            block_size = a_set.block_size
+            threshold = threshold_mults[i] * block_size * self.error_threshold
+            kernel = np.ones(block_size, dtype=int)
+            top_diff_sizes_convolved = np.convolve(top_diff_sizes, kernel, 'valid')
+            # find the starting indices of blocks where the convolution result  is below 'threshold'
+            block_starts = np.where(top_diff_sizes_convolved < threshold)[0]
+            block_index_sets.append(block_starts)
+
+        for indexes in block_index_sets:
+
+
         # flatten rgb channels into each row   [r1,g1,b1,r2,g2,b2,...]
         combined_channels = img.reshape(img.shape[0], -1)
         # add an extra row at the top of combined_channels
         # this aligns it with the rows in the compressed_values array
         combined_channels = np.insert(combined_channels, 0, self.DEFAULT_ROW_VALUE, axis=0)
         # convert original values to avoid overflow errors
-        self.original_values = combined_channels.astype(np.int32)
+        self.original_values = combined_channels.astype(np.int16)
 
     def get_best_matches(self):
         """
@@ -131,6 +153,7 @@ class NNCompressor:
         distances, indices = self.kd_tree.query(row_diffs)
         # Convert indices to actual points from setB
         self.row_matches = [self.one_pixel_set[index] for index in indices]
+
 
     def get_match(self, col_idx, row_diffs):
         """
@@ -360,3 +383,5 @@ class NNCompressor:
         # reshape to 3 channels for image display
         self.decompressed_values = decompressed_values.reshape(decompressed_values.shape[0],
                                                                decompressed_values.shape[1] // 3, 3)
+
+
