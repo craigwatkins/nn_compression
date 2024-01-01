@@ -42,6 +42,8 @@ class NNCompressor:
         self.one_pixel_set = self.lookup_table.set_list[-1].vectors
         self.kd_tree = KDTree(self.one_pixel_set)
         self.row_matches = []
+        self.block_index_sets = []
+        self.trees = [KDTree(a_set.vectors) for a_set in self.lookup_table.set_list]
 
     def get_lookup_table(self):
         """
@@ -65,8 +67,6 @@ class NNCompressor:
         self.compressed_values[0, :] = self.DEFAULT_ROW_VALUE
         self.clip_min = min(self.original_values.flatten())
         self.clip_max = max(self.original_values.flatten())
-        self.height = self.original_values.shape[0]
-        self.width = self.original_values.shape[1]
 
         start = time.time()
         self.get_best_matches()
@@ -75,6 +75,9 @@ class NNCompressor:
         print("specials:", self.specials)
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
+        """
+       
+       
         image_data = self.huff_compress()
         header_obj = Header()
         header = header_obj.build_header([self.compressed_values.shape[0], self.compressed_values.shape[1],
@@ -84,38 +87,52 @@ class NNCompressor:
         pb.write_padded_bytes(header + image_data, self.compressed_path)
         print("match counter:", self.match_counter)
         # reshape compressed values for image display
-        self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
-                                                                self.compressed_values.shape[1] // 3, 3)
+        #self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
+                                                                #self.compressed_values.shape[1] // 3, 3)
+        """
+
         return self.compressed_values
 
     def preprocess_image(self, source_path):
-        img = cv.imread(source_path)
-        top_diffs = img[1:] - img[:-1]
+        self.original_values = cv.imread(source_path).astype(np.int16)
+        # insert a row of default values at the top of the image
+        self.original_values = np.insert(self.original_values, 0, self.DEFAULT_ROW_VALUE, axis=0)
+        self.height = self.original_values.shape[0]
+        self.width = self.original_values.shape[1]
+        top_diffs = self.original_values[1:] - self.original_values[:-1]
         top_diff_sizes = np.linalg.norm(top_diffs, axis=2).flatten()
-        threshold_mults = [2, 2, 2, 2, 16, 30, 24, 0]
+        # reshape to a list of r,g,b vectors
+        #top_diffs = top_diffs.reshape(top_diffs.shape[0]*top_diffs.shape[1], -1)
+        threshold_mults = [4, 4, 3, 3, 3, 3, 3, 2]
+        matches = [0]*(len(self.lookup_table.set_list) - 1)
 
-        block_index_sets = []
-        for i, a_set in enumerate(self.lookup_table.set_list):
-            block_size = a_set.block_size
-            threshold = threshold_mults[i] * block_size * self.error_threshold
+        for i in range(len(self.lookup_table.set_list)-1):
+            indices_by_row = [[] for _ in range(self.height)]
+            a_set = self.lookup_table.set_list[i]
+            block_size = a_set.block_size//3
+            threshold = threshold_mults[i] * self.error_threshold
             kernel = np.ones(block_size, dtype=int)
+            padding_needed = len(kernel) - 1
             top_diff_sizes_convolved = np.convolve(top_diff_sizes, kernel, 'valid')
-            # find the starting indices of blocks where the convolution result  is below 'threshold'
-            block_starts = np.where(top_diff_sizes_convolved < threshold)[0]
-            block_index_sets.append(block_starts)
-
-        for indexes in block_index_sets:
-
+            top_diff_sizes_convolved = np.pad(top_diff_sizes_convolved, (0, padding_needed), mode='constant', constant_values=99999).reshape(self.height-1, self.width)
+            # find the starting indices of blocks where the convolution result is below threshold
+            block_starts = np.where(top_diff_sizes_convolved < threshold)
+            matches[i] = len(block_starts[0])
+            for j, row in enumerate(block_starts[0]):
+                # the end of a row does not have valid values from the kernel, and cannot take a full block, so ignore
+                if block_starts[1][j] <= self.width - block_size:
+                    indices_by_row[row].append(block_starts[1][j])
+            self.block_index_sets.append(indices_by_row)
 
         # flatten rgb channels into each row   [r1,g1,b1,r2,g2,b2,...]
-        combined_channels = img.reshape(img.shape[0], -1)
+        #combined_channels = img.reshape(img.shape[0], -1)
         # add an extra row at the top of combined_channels
         # this aligns it with the rows in the compressed_values array
-        combined_channels = np.insert(combined_channels, 0, self.DEFAULT_ROW_VALUE, axis=0)
+        #combined_channels = np.insert(combined_channels, 0, self.DEFAULT_ROW_VALUE, axis=0)
         # convert original values to avoid overflow errors
-        self.original_values = combined_channels.astype(np.int16)
+        #self.original_values = combined_channels.astype(np.int16)
 
-    def get_best_matches(self):
+    def get_best_matches_old(self):
         """
         Description: This method is used to iterate over the image and find the difference between the actual values of
         the current row and the approximated values of the previous row. The differences are approximated by finding the closest match in the lookup table.
@@ -140,6 +157,61 @@ class NNCompressor:
                 neighbors = np.array(self.compressed_values[row_idx - 1, col_idx:col_idx + size])
                 self.compressed_values[row_idx, col_idx:col_idx + size] = np.clip(neighbors - np.array(match), self.clip_min, self.clip_max)
                 col_idx += size
+
+    def get_best_matches(self):
+        for row_idx in range(1, self.height):
+            self.row_idx = row_idx
+            reserved_mask = np.zeros(self.width)
+            row_diffs = self.compressed_values[row_idx - 1, :] - self.original_values[row_idx, :]
+            row_queue = np.zeros((self.width, 3))
+            for i, indexes in enumerate(self.block_index_sets):
+                col_indexes = indexes[row_idx]
+                if col_indexes:
+                    new_mask = np.zeros(self.width)
+                    a_set = self.lookup_table.set_list[i]
+                    block_size = a_set.block_size//3
+                    # get the column indexes whose blocks won't overlap with any other previously added blocks
+                    valid_indexes = check_for_overlap(reserved_mask, np.array(col_indexes), block_size)
+                    # get the diffs for the valid indexes in the row
+                    diffs = get_diffs(row_diffs, np.array(valid_indexes), block_size)
+                    # find the closest matches for the diffs
+                    distances, indices = self.trees[i].query(diffs)
+                    row_matches = np.array([a_set.vectors[index] for index in indices])
+                    # check to see if any are under the error threshold
+                    # indexes_under_threshold is a list of the indexes from distances/indices/valid_indexes/diffs/row_matches where the error is under the threshold
+                    indexes_under_threshold = np.where(distances < self.error_threshold)[0]
+                    if indexes_under_threshold.any():
+                        # get the column indexes of the matches where the error is under the threshold
+                        under_thresh_col_indexes = np.array(valid_indexes)[indexes_under_threshold]
+                        # get the matches for the indexes where the error is under the threshold
+                        row_matches = row_matches[indexes_under_threshold]
+                        # check for overlap within the accepted column indexes
+                        col_index_diffs = under_thresh_col_indexes[1:] - under_thresh_col_indexes[:-1]
+                        # get the indexes within col_index_diffs where the difference from the previous index
+                        # is greater than the block size (the blocks don't overlap)
+                        non_overlapping_indexes = np.where(col_index_diffs > block_size)[0]
+                        non_overlapping_indexes = non_overlapping_indexes + 1
+                        # the first index of accepted_col_indexes is always valid, so add it to the beginning of the list
+                        #non_overlapping_indexes = np.insert(non_overlapping_indexes, 0, 0)
+                        # get the column indexes of the matches where the blocks don't overlap.
+                        accepted_col_indexes = np.insert(under_thresh_col_indexes[non_overlapping_indexes], 0, under_thresh_col_indexes[0])
+                        # get the matches for the accepted column indexes
+                        accepted_matches = np.insert(row_matches[non_overlapping_indexes], 0, row_matches[0])
+                        accepted_matches = accepted_matches.reshape(accepted_matches.shape[0]//3, 3)
+                        # add the matches to the row_queue
+                        row_queue = add_matches(row_queue, np.array(accepted_matches), np.array(accepted_col_indexes), block_size)
+                        # add the indexes to the mask
+                        reserved_mask = add_to_mask(reserved_mask, accepted_col_indexes, block_size)
+            # fill the rest of the row with the single pixel matches
+            # get remaining indexes
+            remaining_indexes = np.where(reserved_mask == 0)[0]
+            diffs = get_diffs(row_diffs, remaining_indexes, 1)
+            distances, indices = self.trees[-1].query(diffs)
+            #self.lookup_table.set_list[-1].vectors
+            row_matches = np.array([self.lookup_table.set_list[-1].vectors[index] for index in indices])
+            # add to row queue
+            row_queue = add_matches(row_queue, np.array(row_matches), np.array(remaining_indexes), 1)
+            self.compressed_values[row_idx, :] = np.clip(self.compressed_values[row_idx - 1, :] - row_queue, self.clip_min, self.clip_max)
 
     def get_row_matches(self, row_diffs):
         """
@@ -383,5 +455,38 @@ class NNCompressor:
         # reshape to 3 channels for image display
         self.decompressed_values = decompressed_values.reshape(decompressed_values.shape[0],
                                                                decompressed_values.shape[1] // 3, 3)
+
+
+@jit(nopython=True)
+def check_for_overlap(mask_1, indexes, block_size):
+    valid_indexes = []
+    for idx in indexes:
+        if not np.any(mask_1[idx:idx + block_size]):
+            valid_indexes.append(idx)
+    return valid_indexes
+
+
+#@jit(nopython=True)
+def get_diffs(row, indexes, block_size):
+    row = row.flatten()
+    diffs = []
+    for idx in indexes:
+        diffs.append(row[3*idx:3*idx + block_size*3])
+    return diffs
+
+
+#@jit(nopython=True)
+def add_to_mask(mask, indexes, block_size):
+    for idx in indexes:
+        mask[idx:idx + block_size] = True
+    return mask
+
+
+#@jit(nopython=True)
+def add_matches(row, matches, indexes, block_size):
+    for i, idx in enumerate(indexes):
+        match = matches[i*block_size:i*block_size+block_size]
+        row[idx:idx + block_size] = match
+    return row
 
 
