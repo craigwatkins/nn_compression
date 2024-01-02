@@ -86,10 +86,11 @@ class NNCompressor:
         # save the compressed image
         pb.write_padded_bytes(header + image_data, self.compressed_path)
         print("match counter:", self.match_counter)
-        # reshape compressed values for image display
-        #self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
-                                                                #self.compressed_values.shape[1] // 3, 3)
         """
+        # reshape compressed values for image display
+        self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
+                                                                self.compressed_values.shape[1] // 3, 3)
+
 
         return self.compressed_values
 
@@ -100,76 +101,56 @@ class NNCompressor:
         self.height = self.original_values.shape[0]
         self.width = self.original_values.shape[1]
         top_diffs = self.original_values[1:] - self.original_values[:-1]
-        top_diff_sizes = np.linalg.norm(top_diffs, axis=2).flatten()
+        top_diffs_flat = top_diffs.reshape(top_diffs.shape[0]*top_diffs.shape[1], -1)
+        # find the Euclidean distance of each r,g,b vector
+        top_diff_sizes = np.linalg.norm(top_diffs_flat, axis=1)
         # reshape to a list of r,g,b vectors
         #top_diffs = top_diffs.reshape(top_diffs.shape[0]*top_diffs.shape[1], -1)
-        threshold_mults = [4, 4, 3, 3, 3, 3, 3, 2]
+        threshold_mults = [3, 3, 3, 3, 3, 3, 3, 2]
         matches = [0]*(len(self.lookup_table.set_list) - 1)
-
+        """
+        Try to find runs of small diffs appropriate for each block size across the entire image
+        The heuristic is to sum the Euclidean distances of the r, g, b diffs in a block, and if the sum 
+        is below a threshold, then the block is a candidate for matching.
+        Record the starting indexes of the blocks that are below the threshold by block size and by row
+        """
         for i in range(len(self.lookup_table.set_list)-1):
             indices_by_row = [[] for _ in range(self.height)]
             a_set = self.lookup_table.set_list[i]
             block_size = a_set.block_size//3
             threshold = threshold_mults[i] * self.error_threshold
+            # use a convolution to find the sums of the diffs in range block_size
             kernel = np.ones(block_size, dtype=int)
             padding_needed = len(kernel) - 1
             top_diff_sizes_convolved = np.convolve(top_diff_sizes, kernel, 'valid')
             top_diff_sizes_convolved = np.pad(top_diff_sizes_convolved, (0, padding_needed), mode='constant', constant_values=99999).reshape(self.height-1, self.width)
             # find the starting indices of blocks where the convolution result is below threshold
+            # block starts has two arrays, the first is the row indexes, the second is the column indexes
             block_starts = np.where(top_diff_sizes_convolved < threshold)
             matches[i] = len(block_starts[0])
-            for j, row in enumerate(block_starts[0]):
+            for j, row in enumerate(block_starts[0]):  # iterate through the row indexes
                 # the end of a row does not have valid values from the kernel, and cannot take a full block, so ignore
                 if block_starts[1][j] <= self.width - block_size:
-                    indices_by_row[row].append(block_starts[1][j])
+                    indices_by_row[row].append(block_starts[1][j]*3)
+
             self.block_index_sets.append(indices_by_row)
 
         # flatten rgb channels into each row   [r1,g1,b1,r2,g2,b2,...]
-        #combined_channels = img.reshape(img.shape[0], -1)
-        # add an extra row at the top of combined_channels
-        # this aligns it with the rows in the compressed_values array
-        #combined_channels = np.insert(combined_channels, 0, self.DEFAULT_ROW_VALUE, axis=0)
-        # convert original values to avoid overflow errors
-        #self.original_values = combined_channels.astype(np.int16)
+        self.original_values = self.original_values.reshape(self.height, -1)
+        self.width = self.original_values.shape[1]
 
-    def get_best_matches_old(self):
-        """
-        Description: This method is used to iterate over the image and find the difference between the actual values of
-        the current row and the approximated values of the previous row. The differences are approximated by finding the closest match in the lookup table.
-        The closest match is then used to generate the new values for the current row which is then stored in the
-        compressed_values array.
-        """
-        max_block_size = self.lookup_table.max_block_size
-        for row_idx in range(1, self.height):
-            self.row_idx = row_idx
-            col_idx = 0
-            row_diffs = self.compressed_values[row_idx - 1, :] - self.original_values[row_idx, :]
-            if row_idx > 1:
-                self.get_row_matches(row_diffs)
-            while col_idx < self.width:
-                if row_idx == 1 and col_idx > 0:
-                    # generate values for the first (extra) row of compressed_values so that actual values can be
-                    # subtracted from them to get the differences for the first (actual) row of the image
-                    self.approximate_top_values(row_idx, col_idx, self.compressed_values)
-                    row_diffs[col_idx:col_idx + max_block_size] = self.compressed_values[row_idx - 1, col_idx:col_idx + max_block_size] - self.original_values[row_idx, col_idx:col_idx + max_block_size]
-                match, size = self.get_match(col_idx, row_diffs)
-                self.matches.append(match)
-                neighbors = np.array(self.compressed_values[row_idx - 1, col_idx:col_idx + size])
-                self.compressed_values[row_idx, col_idx:col_idx + size] = np.clip(neighbors - np.array(match), self.clip_min, self.clip_max)
-                col_idx += size
 
     def get_best_matches(self):
         for row_idx in range(1, self.height):
             self.row_idx = row_idx
             reserved_mask = np.zeros(self.width)
             row_diffs = self.compressed_values[row_idx - 1, :] - self.original_values[row_idx, :]
-            row_queue = np.zeros((self.width, 3))
+            row_queue = np.zeros(self.width)
             for i, indexes in enumerate(self.block_index_sets):
                 col_indexes = indexes[row_idx]
                 if col_indexes:
-                    new_mask = np.zeros(self.width)
                     a_set = self.lookup_table.set_list[i]
-                    block_size = a_set.block_size//3
+                    block_size = a_set.block_size
                     # get the column indexes whose blocks won't overlap with any other previously added blocks
                     valid_indexes = check_for_overlap(reserved_mask, np.array(col_indexes), block_size)
                     # get the diffs for the valid indexes in the row
@@ -189,15 +170,18 @@ class NNCompressor:
                         col_index_diffs = under_thresh_col_indexes[1:] - under_thresh_col_indexes[:-1]
                         # get the indexes within col_index_diffs where the difference from the previous index
                         # is greater than the block size (the blocks don't overlap)
+                        # Note: this method may overlook some indexes where multiple blocks are overlapping
+                        # e.g. with diffs -1,-2 for a block size of 3, the second block will be overlooked
+                        # because once the -1 block is removed, the -2 block will be outside the block size
                         non_overlapping_indexes = np.where(col_index_diffs > block_size)[0]
+                        # add 1 to account for lost index from creating diffs
                         non_overlapping_indexes = non_overlapping_indexes + 1
-                        # the first index of accepted_col_indexes is always valid, so add it to the beginning of the list
-                        #non_overlapping_indexes = np.insert(non_overlapping_indexes, 0, 0)
                         # get the column indexes of the matches where the blocks don't overlap.
+                        # the first index of under_thresh_col_indexes is always valid, so add it to the beginning of the list
                         accepted_col_indexes = np.insert(under_thresh_col_indexes[non_overlapping_indexes], 0, under_thresh_col_indexes[0])
                         # get the matches for the accepted column indexes
                         accepted_matches = np.insert(row_matches[non_overlapping_indexes], 0, row_matches[0])
-                        accepted_matches = accepted_matches.reshape(accepted_matches.shape[0]//3, 3)
+                        accepted_matches = accepted_matches.reshape(-1, block_size)
                         # add the matches to the row_queue
                         row_queue = add_matches(row_queue, np.array(accepted_matches), np.array(accepted_col_indexes), block_size)
                         # add the indexes to the mask
@@ -205,80 +189,16 @@ class NNCompressor:
             # fill the rest of the row with the single pixel matches
             # get remaining indexes
             remaining_indexes = np.where(reserved_mask == 0)[0]
-            diffs = get_diffs(row_diffs, remaining_indexes, 1)
+            # select every third index in remaining_indexes starting with the first index
+            remaining_indexes = remaining_indexes[::3]
+            diffs = get_diffs(row_diffs, remaining_indexes, 3)
             distances, indices = self.trees[-1].query(diffs)
-            #self.lookup_table.set_list[-1].vectors
             row_matches = np.array([self.lookup_table.set_list[-1].vectors[index] for index in indices])
             # add to row queue
-            row_queue = add_matches(row_queue, np.array(row_matches), np.array(remaining_indexes), 1)
+            row_queue = add_matches(row_queue, np.array(row_matches), np.array(remaining_indexes), 3)
             self.compressed_values[row_idx, :] = np.clip(self.compressed_values[row_idx - 1, :] - row_queue, self.clip_min, self.clip_max)
 
-    def get_row_matches(self, row_diffs):
-        """
-        Description: This method is used to find the closest match in the lookup table for each pixel
-        in the current row (self.row_matches). It uses a KDTree to find the best match.
-        :param row_diffs: differences between the actual values of the current row and the
-        approximated values of the previous row
-        :return: None
-        """
-        row_diffs = [row_diffs[i:i + 3] for i in range(0, len(row_diffs), 3)]
-        distances, indices = self.kd_tree.query(row_diffs)
-        # Convert indices to actual points from setB
-        self.row_matches = [self.one_pixel_set[index] for index in indices]
 
-
-    def get_match(self, col_idx, row_diffs):
-        """
-        Description: This method is used to find the closest match in the lookup table for a given vector.
-        It tries to find the largest match possible, starting with the largest block size and moving down
-        to the smallest block size.
-        :param col_idx: column index of the current pixel
-        :param row_diffs: differences between the actual values of the current row
-        and the approximated values of the previous row
-        :return:
-            closest_match: the closest match in the lookup table
-            block_size: the size of the block that was matched
-        """
-        block_size = 0
-        closest_match = None
-        closest_index = None
-        return_the_match = False
-        i = 0
-        for i, a_set in enumerate(self.lookup_table.set_list):
-            block_size = a_set.block_size
-            if col_idx + block_size > self.width:
-                # if the there isn't enough room for a vector of this size to fit in the row
-                # move on to the next smaller block size
-                continue
-            diff = row_diffs[col_idx:col_idx + block_size]
-            # if the block_size is only one pixel (r,g,b), look for special values
-            # skip the first row and column to ensure that all values are available
-            if block_size == 3 and col_idx > 0 and self.row_idx > 0:
-                special_match = self.find_special_match(col_idx)
-                if len(special_match) > 0:
-                    return special_match, block_size
-            if block_size == 3 and self.row_idx > 1:
-                # row_matches are only bulk generated for 1 pixel blocks after the first row
-                # and here we can simply get the appropriate match from the row_matches list
-                closest_match = self.row_matches[col_idx // 3]
-                closest_index = self.lookup_table.index_dict[closest_match]
-                return_the_match = True
-            else:
-                # we either have a multi-pixel block or we're in the first row
-                closest_match = tuple(a_set.set_index.get_closest_match(diff))
-                closest_index = self.lookup_table.index_dict[closest_match]
-                if block_size > 3:
-                    error = np.linalg.norm(diff - np.array(closest_match))
-                    return_the_match = error < self.error_threshold
-                else:
-                    # we won't find a better match after this, so return the match regardless of error
-                    return_the_match = True
-            if return_the_match:
-                self.match_counter[i] += 1
-                self.compressed_indexes.append(closest_index)
-                return closest_match, block_size
-            else:
-                continue
 
     def paeth_predictor(self, left, above, upper_left):
         """
@@ -461,6 +381,7 @@ class NNCompressor:
 def check_for_overlap(mask_1, indexes, block_size):
     valid_indexes = []
     for idx in indexes:
+        # Ensure that none of the indexes in the block are already in the mask
         if not np.any(mask_1[idx:idx + block_size]):
             valid_indexes.append(idx)
     return valid_indexes
@@ -471,7 +392,7 @@ def get_diffs(row, indexes, block_size):
     row = row.flatten()
     diffs = []
     for idx in indexes:
-        diffs.append(row[3*idx:3*idx + block_size*3])
+        diffs.append(row[idx:idx + block_size])
     return diffs
 
 
@@ -484,9 +405,10 @@ def add_to_mask(mask, indexes, block_size):
 
 #@jit(nopython=True)
 def add_matches(row, matches, indexes, block_size):
+    # indexes are the column indexes of the matches
+    # matches are the vector matches for the block_size
     for i, idx in enumerate(indexes):
-        match = matches[i*block_size:i*block_size+block_size]
-        row[idx:idx + block_size] = match
+        #match = matches[i*block_size:i*block_size+block_size]
+        row[idx:idx + block_size] = matches[i]
     return row
-
 
