@@ -104,7 +104,7 @@ class NNCompressor:
         top_diff_sizes = np.linalg.norm(top_diffs_flat, axis=1)
         # reshape to a list of r,g,b vectors
         #top_diffs = top_diffs.reshape(top_diffs.shape[0]*top_diffs.shape[1], -1)
-        threshold_mults = [3, 3, 3, 3, 3, 3, 3, 2]
+        threshold_mults = [3, 3, 3, 3, 1000, 1000, 1000, 4]
         matches = [0]*(len(self.lookup_table.set_list) - 1)
         """
         Try to find runs of small diffs appropriate for each block size across the entire image
@@ -113,7 +113,7 @@ class NNCompressor:
         Record the starting indexes of the blocks that are below the threshold by block size and by row
         """
         for i in range(len(self.lookup_table.set_list)-1):
-            indices_by_row = [[] for _ in range(self.height)]
+            indices_by_row = [[] for _ in range(self.height - 1)]
             a_set = self.lookup_table.set_list[i]
             block_size = a_set.block_size//3
             threshold = threshold_mults[i] * self.error_threshold
@@ -130,9 +130,7 @@ class NNCompressor:
                 # the end of a row does not have valid values from the kernel, and cannot take a full block, so ignore
                 if block_starts[1][j] <= self.width - block_size:
                     indices_by_row[row].append(block_starts[1][j]*3)
-
             self.block_index_sets.append(indices_by_row)
-
         # flatten rgb channels into each row   [r1,g1,b1,r2,g2,b2,...]
         self.original_values = self.original_values.reshape(self.height, -1)
         self.width = self.original_values.shape[1]
@@ -145,41 +143,41 @@ class NNCompressor:
             row_queue = np.zeros(self.width)
             self.row_lookup_indexes = {}
             for i, indexes in enumerate(self.block_index_sets):
-                col_indexes = indexes[row_idx]
+                col_indexes = indexes[row_idx-1]
                 if col_indexes:
                     a_set = self.lookup_table.set_list[i]
                     block_size = a_set.block_size
                     # get the column indexes whose blocks won't overlap with any other previously added blocks
                     valid_indexes = check_for_overlap(reserved_mask, np.array(col_indexes), block_size)
+                if col_indexes and valid_indexes:
                     # get the diffs for the valid indexes in the row
                     diffs = get_diffs(row_diffs, np.array(valid_indexes), block_size)
                     # find the closest matches for the diffs
                     distances, indices = self.trees[i].query(diffs)
                     row_matches = np.array([a_set.vectors[index] for index in indices])
+                    row_match_dict = {valid_indexes[m]: row_matches[m] for m in range(len(valid_indexes))}
                     # check to see if any are under the error threshold
                     # indexes_under_threshold is a list of the indexes from distances/indices/valid_indexes/diffs/row_matches where the error is under the threshold
                     indexes_under_threshold = np.where(distances < self.error_threshold)[0]
-                    if indexes_under_threshold.any():
+                    if len(indexes_under_threshold) > 0:
                         # get the column indexes of the matches where the error is under the threshold
                         under_thresh_col_indexes = np.array(valid_indexes)[indexes_under_threshold]
                         # get the matches for the indexes where the error is under the threshold
-                        row_matches = row_matches[indexes_under_threshold]
-                        # check for overlap between indexes
-                        col_index_diffs = under_thresh_col_indexes[1:] - under_thresh_col_indexes[:-1]
-                        # get the indexes within col_index_diffs where the difference from the previous index
-                        # is greater than the block size (the blocks don't overlap)
-                        # Note: this method may overlook some indexes where multiple blocks are overlapping
-                        # e.g. with diffs -1,-2 for a block size of 3, the second block will be overlooked
-                        # because once the -1 block is removed, the -2 block will be outside the block size
-                        non_overlapping_indexes = np.where(col_index_diffs > block_size)[0]
-                        # add 1 to account for lost index from creating diffs
-                        non_overlapping_indexes = non_overlapping_indexes + 1
+                        #row_matches = row_matches[indexes_under_threshold]
+                        cur_cutoff = 0
+                        non_overlapping_indexes = []
+                        for k, idx in enumerate(under_thresh_col_indexes):
+                            if idx < cur_cutoff:
+                                pass
+                            else:
+                                non_overlapping_indexes.append(k)
+                                cur_cutoff = idx + block_size - 1
                         # get the column indexes of the matches where the blocks don't overlap.
-                        # the first index of under_thresh_col_indexes is always valid, so add it to the beginning of the list
-                        accepted_col_indexes = np.insert(under_thresh_col_indexes[non_overlapping_indexes], 0, under_thresh_col_indexes[0])
+                        accepted_col_indexes = under_thresh_col_indexes[non_overlapping_indexes]
                         # get the matches for the accepted column indexes
-                        accepted_matches = np.insert(row_matches[non_overlapping_indexes], 0, row_matches[0])
-                        accepted_matches = accepted_matches.reshape(-1, block_size)
+                        #accepted_matches = row_matches[non_overlapping_indexes]
+                        accepted_matches = np.array([row_match_dict[n] for n in accepted_col_indexes])
+                        #accepted_matches = accepted_matches.reshape(-1, block_size)
                         self.add_lookup_indexes(accepted_matches, accepted_col_indexes)
                         # add the matches to the row_queue
                         row_queue = add_matches(row_queue, np.array(accepted_matches), np.array(accepted_col_indexes), block_size)
@@ -194,14 +192,16 @@ class NNCompressor:
             # to find the values for a single pixel
             remaining_indexes = remaining_indexes[::3]
             diffs = get_diffs(row_diffs, remaining_indexes, 3)
-            distances, indices = self.trees[-1].query(diffs)
-            row_matches = np.array([self.lookup_table.set_list[-1].vectors[index] for index in indices])
-            self.add_lookup_indexes(row_matches, remaining_indexes)
-            # sort self.row_lookup_indexes keys and add the values to self.compressed_indexes
+            if diffs:
+                distances, indices = self.trees[-1].query(diffs)
+                row_matches = np.array([self.lookup_table.set_list[-1].vectors[index] for index in indices])
+                self.add_lookup_indexes(row_matches, remaining_indexes)
+                # sort self.row_lookup_indexes keys and add the values to self.compressed_indexes
+
+                self.match_counter[-2] += len(remaining_indexes)
+                # add to row queue
+                row_queue = add_matches(row_queue, np.array(row_matches), np.array(remaining_indexes), 3)
             self.compressed_indexes += [self.row_lookup_indexes[key] for key in sorted(self.row_lookup_indexes.keys())]
-            self.match_counter[i] += len(remaining_indexes)
-            # add to row queue
-            row_queue = add_matches(row_queue, np.array(row_matches), np.array(remaining_indexes), 3)
             self.compressed_values[row_idx, :] = np.clip(self.compressed_values[row_idx - 1, :] - row_queue, self.clip_min, self.clip_max)
 
     def add_lookup_indexes(self, matches, col_indexes):
@@ -421,3 +421,7 @@ def add_matches(row, matches, indexes, block_size):
         row[idx:idx + block_size] = matches[i]
     return row
 
+"""
+        self.original_values = [[[0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                                [[0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]]
+"""
