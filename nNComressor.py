@@ -44,6 +44,7 @@ class NNCompressor:
         self.row_matches = []
         self.block_index_sets = []
         self.trees = [KDTree(a_set.vectors) for a_set in self.lookup_table.set_list]
+        self.row_lookup_indexes = {}
 
     def get_lookup_table(self):
         """
@@ -75,9 +76,7 @@ class NNCompressor:
         print("specials:", self.specials)
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
-        """
-       
-       
+
         image_data = self.huff_compress()
         header_obj = Header()
         header = header_obj.build_header([self.compressed_values.shape[0], self.compressed_values.shape[1],
@@ -86,11 +85,10 @@ class NNCompressor:
         # save the compressed image
         pb.write_padded_bytes(header + image_data, self.compressed_path)
         print("match counter:", self.match_counter)
-        """
+
         # reshape compressed values for image display
         self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
                                                                 self.compressed_values.shape[1] // 3, 3)
-
 
         return self.compressed_values
 
@@ -139,13 +137,13 @@ class NNCompressor:
         self.original_values = self.original_values.reshape(self.height, -1)
         self.width = self.original_values.shape[1]
 
-
     def get_best_matches(self):
         for row_idx in range(1, self.height):
             self.row_idx = row_idx
             reserved_mask = np.zeros(self.width)
             row_diffs = self.compressed_values[row_idx - 1, :] - self.original_values[row_idx, :]
             row_queue = np.zeros(self.width)
+            self.row_lookup_indexes = {}
             for i, indexes in enumerate(self.block_index_sets):
                 col_indexes = indexes[row_idx]
                 if col_indexes:
@@ -166,7 +164,7 @@ class NNCompressor:
                         under_thresh_col_indexes = np.array(valid_indexes)[indexes_under_threshold]
                         # get the matches for the indexes where the error is under the threshold
                         row_matches = row_matches[indexes_under_threshold]
-                        # check for overlap within the accepted column indexes
+                        # check for overlap between indexes
                         col_index_diffs = under_thresh_col_indexes[1:] - under_thresh_col_indexes[:-1]
                         # get the indexes within col_index_diffs where the difference from the previous index
                         # is greater than the block size (the blocks don't overlap)
@@ -182,23 +180,34 @@ class NNCompressor:
                         # get the matches for the accepted column indexes
                         accepted_matches = np.insert(row_matches[non_overlapping_indexes], 0, row_matches[0])
                         accepted_matches = accepted_matches.reshape(-1, block_size)
+                        self.add_lookup_indexes(accepted_matches, accepted_col_indexes)
                         # add the matches to the row_queue
                         row_queue = add_matches(row_queue, np.array(accepted_matches), np.array(accepted_col_indexes), block_size)
+                        self.match_counter[i] += len(accepted_col_indexes)
                         # add the indexes to the mask
                         reserved_mask = add_to_mask(reserved_mask, accepted_col_indexes, block_size)
             # fill the rest of the row with the single pixel matches
             # get remaining indexes
             remaining_indexes = np.where(reserved_mask == 0)[0]
+            # every channel has an index in the row
             # select every third index in remaining_indexes starting with the first index
+            # to find the values for a single pixel
             remaining_indexes = remaining_indexes[::3]
             diffs = get_diffs(row_diffs, remaining_indexes, 3)
             distances, indices = self.trees[-1].query(diffs)
             row_matches = np.array([self.lookup_table.set_list[-1].vectors[index] for index in indices])
+            self.add_lookup_indexes(row_matches, remaining_indexes)
+            # sort self.row_lookup_indexes keys and add the values to self.compressed_indexes
+            self.compressed_indexes += [self.row_lookup_indexes[key] for key in sorted(self.row_lookup_indexes.keys())]
+            self.match_counter[i] += len(remaining_indexes)
             # add to row queue
             row_queue = add_matches(row_queue, np.array(row_matches), np.array(remaining_indexes), 3)
             self.compressed_values[row_idx, :] = np.clip(self.compressed_values[row_idx - 1, :] - row_queue, self.clip_min, self.clip_max)
 
-
+    def add_lookup_indexes(self, matches, col_indexes):
+        lookup_indexes = [self.lookup_table.index_dict[tuple(x)] for x in matches]
+        for j in range(len(lookup_indexes)):
+            self.row_lookup_indexes[col_indexes[j]] = lookup_indexes[j]
 
     def paeth_predictor(self, left, above, upper_left):
         """
