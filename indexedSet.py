@@ -1,4 +1,4 @@
-from setIndex import SetIndex
+from scipy.spatial import KDTree
 
 
 class IndexedSet:
@@ -11,11 +11,19 @@ class IndexedSet:
                     block_size: The size of the tuple
     """
 
-    def __init__(self, vectors, use_saved_index=False, index_type='annoy'):
+    def __init__(self, vectors):
         self.vectors = vectors
         self.set_index = None
         self.block_size = len(vectors[0])
-        self.create_index(use_saved_index, index_type)
+        self.tree = KDTree(vectors)
 
-    def create_index(self, use_saved_index=False, index_type='annoy'):
-        self.set_index = SetIndex(self.vectors, 0, index_type, use_saved_index=use_saved_index)
+    def get_matches(self, vectors):
+        """
+        This method returns the closest match for each vector in vectors
+        :param vectors: The vectors to search for
+        :return: The closest match for each vector, and the distance to that match
+        """
+        distances, vector_indices = self.tree.query(vectors)
+        return distances, vector_indices
+
+

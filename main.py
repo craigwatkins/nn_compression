@@ -24,7 +24,7 @@ def demo():
     crop_size = 450
     crop_offset = 150
     crop_image = False
-    image = "18"
+    image = "19"
     source_path = f"""images/kodak/kodim{image}.png"""
     #source_path = f"""images/test/black.png"""
     save_path = f"""bins/test/{image}.bin"""

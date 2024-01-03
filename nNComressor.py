@@ -1,7 +1,6 @@
 import numpy as np
 import cv2 as cv
 import time
-from scipy.spatial import KDTree
 from numba import jit
 
 
@@ -40,11 +39,8 @@ class NNCompressor:
         self.compressed_path = ''
         self.row_idx = 0
         self.specials = [[0], [0], [0]]
-        self.one_pixel_set = self.lookup_table.set_list[-1].vectors
-        self.kd_tree = KDTree(self.one_pixel_set)
         self.row_matches = []
         self.block_index_sets = []
-        self.trees = [KDTree(a_set.vectors) for a_set in self.lookup_table.set_list]
         self.row_lookup_indexes = {}
 
     def get_lookup_table(self):
@@ -141,7 +137,6 @@ class NNCompressor:
         diffs so that the error is minimized.
         It iterates through each row, greedily trying to fill the larger block size matches first.
         A mask is used to keep track of where matches have been found as the block sizes get smaller.
-
         """
         for row_idx in range(1, self.height):
             unfilled_indexes = []
@@ -163,7 +158,7 @@ class NNCompressor:
                     # get the diffs for the valid indexes in the row
                     diffs = get_diffs(row_diffs, np.array(unfilled_indexes), block_size)
                     # find the closest matches for the diffs
-                    distances, vector_indexes = self.trees[i].query(diffs)
+                    distances, vector_indexes = a_set.get_matches(diffs)
                     row_matches = np.array([a_set.vectors[index] for index in vector_indexes])
                     row_match_dict = {unfilled_indexes[m]: row_matches[m] for m in range(len(unfilled_indexes))}
                     # check to see if any are under the error threshold
@@ -200,8 +195,9 @@ class NNCompressor:
             remaining_indexes = remaining_indexes[::3]
             diffs = get_diffs(row_diffs, remaining_indexes, 3)
             if diffs:
-                distances, indices = self.trees[-1].query(diffs)
-                row_matches = np.array([self.lookup_table.set_list[-1].vectors[index] for index in indices])
+                a_set = self.lookup_table.set_list[-1]
+                distances, indices = a_set.get_matches(diffs)
+                row_matches = np.array([a_set.vectors[index] for index in indices])
                 self.add_lookup_indexes(row_matches, remaining_indexes)
                 self.match_counter[-2] += len(remaining_indexes)
                 # add to row queue
