@@ -24,11 +24,11 @@ def demo():
     crop_size = 450
     crop_offset = 150
     crop_image = False
-    image = "19"
+    image = "18"
     source_path = f"""images/kodak/kodim{image}.png"""
     #source_path = f"""images/test/black.png"""
     save_path = f"""bins/test/{image}.bin"""
-    error_threshold = 4.1
+    error_threshold = 5.8
     make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 
     print("compressing image")
