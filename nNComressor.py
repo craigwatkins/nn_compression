@@ -15,7 +15,7 @@ class NNCompressor:
     Description: This class is used to compress and decompress a given image.
     """
 
-    DEFAULT_ROW_VALUE = 3
+    DEFAULT_ROW_VALUE = 128
 
     def __init__(self):
         """
@@ -32,6 +32,7 @@ class NNCompressor:
         self.matches = []
         self.height = 0
         self.width = 0
+        self.search_depth = 1
         self.decompressed_values = None
         self.max_compressed_bit_size = 14
         self.compressed_length = 0
@@ -53,10 +54,11 @@ class NNCompressor:
         from create_lookup_tables import create_lookup_table
         return create_lookup_table()
 
-    def compress(self, source_path, compressed_path, error_threshold=2):
+    def compress(self, source_path, compressed_path, error_threshold=2, search_depth=5):
         """
         Description: This method is used to compress the image.
         """
+        self.search_depth = search_depth
         self.compressed_path = compressed_path
         self.error_threshold = error_threshold
         start = time.time()
@@ -100,11 +102,8 @@ class NNCompressor:
         self.width = self.original_values.shape[1]
         top_diffs = self.original_values[1:] - self.original_values[:-1]
         top_diffs_flat = top_diffs.reshape(top_diffs.shape[0]*top_diffs.shape[1], -1)
-        # find the Euclidean distance of each r,g,b vector
         top_diff_sizes = np.linalg.norm(top_diffs_flat, axis=1)
-        # reshape to a list of r,g,b vectors
-        #top_diffs = top_diffs.reshape(top_diffs.shape[0]*top_diffs.shape[1], -1)
-        threshold_mults = [3, 3, 3, 3, 1000, 1000, 1000, 4]
+        threshold_mults = [3, 3, 3, 3, self.search_depth, self.search_depth, self.search_depth]
         matches = [0]*(len(self.lookup_table.set_list) - 1)
         """
         Try to find runs of small diffs appropriate for each block size across the entire image
@@ -369,8 +368,6 @@ class NNCompressor:
             # get the matches for the row
             col_idx = 0
             while col_idx < self.width:
-                #if row_idx == 1 and col_idx > 0:
-                    #self.approximate_top_values(row_idx, col_idx, decompressed_values)
                 match = matches[match_idx]
                 if len(match) == 1:
                     # if the match is a special value, calculate the special value from surrounding values
