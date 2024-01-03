@@ -37,7 +37,7 @@ def demo():
     # save the regenerated image
     save_image(compressed.compressed_values, "images/test/test.png")
     del compressed
-    #  decompress_image(save_path)
+    decompress_image(save_path)
 
 
     psnr_v = calculate_psnr("images/test/reference.png", "images/test/test.png")

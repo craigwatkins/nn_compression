@@ -15,7 +15,7 @@ class NNCompressor:
     Description: This class is used to compress and decompress a given image.
     """
 
-    DEFAULT_ROW_VALUE = 128
+    DEFAULT_ROW_VALUE = 3
 
     def __init__(self):
         """
@@ -136,9 +136,20 @@ class NNCompressor:
         self.width = self.original_values.shape[1]
 
     def get_best_matches(self):
+        """
+        Description: This method is used to get the best matches to the original values of the differences between
+        row pixel values. At every row, the compressed values are compared to the original values to create the new
+        diffs so that the error is minimized.
+        It iterates through each row, greedily trying to fill the larger block size matches first.
+        A mask is used to keep track of where matches have been found as the block sizes get smaller.
+
+        """
         for row_idx in range(1, self.height):
+            unfilled_indexes = []
+            block_size = 0
+            a_set = None
             self.row_idx = row_idx
-            reserved_mask = np.zeros(self.width)
+            filled_mask = np.zeros(self.width)
             row_diffs = self.compressed_values[row_idx - 1, :] - self.original_values[row_idx, :]
             row_queue = np.zeros(self.width)
             self.row_lookup_indexes = {}
@@ -148,22 +159,21 @@ class NNCompressor:
                     a_set = self.lookup_table.set_list[i]
                     block_size = a_set.block_size
                     # get the column indexes whose blocks won't overlap with any other previously added blocks
-                    valid_indexes = check_for_overlap(reserved_mask, np.array(col_indexes), block_size)
-                if col_indexes and valid_indexes:
+                    unfilled_indexes = check_for_overlap(filled_mask, np.array(col_indexes), block_size)
+                if col_indexes and unfilled_indexes:
                     # get the diffs for the valid indexes in the row
-                    diffs = get_diffs(row_diffs, np.array(valid_indexes), block_size)
+                    diffs = get_diffs(row_diffs, np.array(unfilled_indexes), block_size)
                     # find the closest matches for the diffs
-                    distances, indices = self.trees[i].query(diffs)
-                    row_matches = np.array([a_set.vectors[index] for index in indices])
-                    row_match_dict = {valid_indexes[m]: row_matches[m] for m in range(len(valid_indexes))}
+                    distances, vector_indexes = self.trees[i].query(diffs)
+                    row_matches = np.array([a_set.vectors[index] for index in vector_indexes])
+                    row_match_dict = {unfilled_indexes[m]: row_matches[m] for m in range(len(unfilled_indexes))}
                     # check to see if any are under the error threshold
                     # indexes_under_threshold is a list of the indexes from distances/indices/valid_indexes/diffs/row_matches where the error is under the threshold
                     indexes_under_threshold = np.where(distances < self.error_threshold)[0]
                     if len(indexes_under_threshold) > 0:
                         # get the column indexes of the matches where the error is under the threshold
-                        under_thresh_col_indexes = np.array(valid_indexes)[indexes_under_threshold]
+                        under_thresh_col_indexes = np.array(unfilled_indexes)[indexes_under_threshold]
                         # get the matches for the indexes where the error is under the threshold
-                        #row_matches = row_matches[indexes_under_threshold]
                         cur_cutoff = 0
                         non_overlapping_indexes = []
                         for k, idx in enumerate(under_thresh_col_indexes):
@@ -175,18 +185,16 @@ class NNCompressor:
                         # get the column indexes of the matches where the blocks don't overlap.
                         accepted_col_indexes = under_thresh_col_indexes[non_overlapping_indexes]
                         # get the matches for the accepted column indexes
-                        #accepted_matches = row_matches[non_overlapping_indexes]
                         accepted_matches = np.array([row_match_dict[n] for n in accepted_col_indexes])
-                        #accepted_matches = accepted_matches.reshape(-1, block_size)
                         self.add_lookup_indexes(accepted_matches, accepted_col_indexes)
                         # add the matches to the row_queue
                         row_queue = add_matches(row_queue, np.array(accepted_matches), np.array(accepted_col_indexes), block_size)
                         self.match_counter[i] += len(accepted_col_indexes)
                         # add the indexes to the mask
-                        reserved_mask = add_to_mask(reserved_mask, accepted_col_indexes, block_size)
+                        filled_mask = add_to_mask(filled_mask, accepted_col_indexes, block_size)
             # fill the rest of the row with the single pixel matches
             # get remaining indexes
-            remaining_indexes = np.where(reserved_mask == 0)[0]
+            remaining_indexes = np.where(filled_mask == 0)[0]
             # every channel has an index in the row
             # select every third index in remaining_indexes starting with the first index
             # to find the values for a single pixel
@@ -196,11 +204,10 @@ class NNCompressor:
                 distances, indices = self.trees[-1].query(diffs)
                 row_matches = np.array([self.lookup_table.set_list[-1].vectors[index] for index in indices])
                 self.add_lookup_indexes(row_matches, remaining_indexes)
-                # sort self.row_lookup_indexes keys and add the values to self.compressed_indexes
-
                 self.match_counter[-2] += len(remaining_indexes)
                 # add to row queue
                 row_queue = add_matches(row_queue, np.array(row_matches), np.array(remaining_indexes), 3)
+            # sort self.row_lookup_indexes keys and add the values to self.compressed_indexes
             self.compressed_indexes += [self.row_lookup_indexes[key] for key in sorted(self.row_lookup_indexes.keys())]
             self.compressed_values[row_idx, :] = np.clip(self.compressed_values[row_idx - 1, :] - row_queue, self.clip_min, self.clip_max)
 
@@ -256,6 +263,8 @@ class NNCompressor:
         values = self.matches
         # indexes = [self.lookup_table.index_dict[tuple(x)] for x in values]
         indexes = self.compressed_indexes
+        decompressed_vectors = [self.lookup_table.index_dict_reverse[x] for x in indexes]
+        #print("decompressed vectors:", decompressed_vectors)
         indexes = np.array(indexes)
         max_index = self.lookup_table.max_index
         # get the number of bits needed to represent the largest index
@@ -344,6 +353,7 @@ class NNCompressor:
             decompressed_indexes = [int(x, 2) for x in decompressed]
         # convert to vectors
         decompressed_vectors = [lookup_table.index_dict_reverse[x] for x in decompressed_indexes]
+
         return decompressed_vectors, decompressed_indexes
 
     def rebuild_image(self, matches):
@@ -353,14 +363,14 @@ class NNCompressor:
         :param matches: The list of matches that will be used to rebuild the image.
         """
         decompressed_values = np.zeros((self.height, self.width), dtype=np.int32)
-        decompressed_values = np.insert(decompressed_values, 0, 128, axis=0)
+        decompressed_values = np.insert(decompressed_values, 0, self.DEFAULT_ROW_VALUE, axis=0)
         match_idx = 0
         for row_idx in range(1, decompressed_values.shape[0]):
             # get the matches for the row
             col_idx = 0
             while col_idx < self.width:
-                if row_idx == 1 and col_idx > 0:
-                    self.approximate_top_values(row_idx, col_idx, decompressed_values)
+                #if row_idx == 1 and col_idx > 0:
+                    #self.approximate_top_values(row_idx, col_idx, decompressed_values)
                 match = matches[match_idx]
                 if len(match) == 1:
                     # if the match is a special value, calculate the special value from surrounding values
