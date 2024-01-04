@@ -26,10 +26,10 @@ def demo():
     crop_image = False
     image = "19"
     source_path = f"""images/kodak/kodim{image}.png"""
-    #source_path = f"""images/test/black.png"""
     save_path = f"""bins/test/{image}.bin"""
     error_threshold = 5.8
     search_depth = 1000  # controls the thoroughness of the search, higher values are slower
+    # make a lossless reference image that can be used to check the compression quality
     make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 
     print("compressing image")
@@ -37,12 +37,14 @@ def demo():
     compressed.compress('images/test/reference.png', save_path, error_threshold, search_depth)
     # save the regenerated image
     save_image(compressed.compressed_values, "images/test/test.png")
+    # Technically, there is no need to delete the compression object, as it is intended to be used multiple times.
+    # This is just a precaution to ensure that there is no data leakage during development.
     del compressed
     decompress_image(save_path)
 
-
     psnr_v = calculate_psnr("images/test/reference.png", "images/test/test.png")
     print("vector psnr", psnr_v)
+    # create a high quality jpeg image for comparison
     psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.jpeg")
     print("jpeg psnr", psnr_j)
     #psnr_j = calculate_psnr("images/test/reference.png", "images/test/verify.png")

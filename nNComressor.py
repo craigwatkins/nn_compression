@@ -57,10 +57,7 @@ class NNCompressor:
         self.search_depth = search_depth
         self.compressed_path = compressed_path
         self.error_threshold = error_threshold
-        start = time.time()
         self.preprocess_image(source_path)
-        end = time.time()
-        print("time to preprocess", end - start)
         self.compressed_values = np.zeros(self.original_values.shape, dtype=np.int32)
         # add an extra row at the top of compressed_values so that it can provide a basis for the first row
         self.compressed_values[0, :] = self.DEFAULT_ROW_VALUE
@@ -82,7 +79,7 @@ class NNCompressor:
                                           self.clip_min, self.clip_max])
         # save the compressed image
         pb.write_padded_bytes(header + image_data, self.compressed_path)
-        print("match counter:", self.match_counter)
+        # print("match counter:", self.match_counter)
 
         # reshape compressed values for image display
         self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
@@ -91,6 +88,10 @@ class NNCompressor:
         return self.compressed_values
 
     def preprocess_image(self, source_path):
+        """
+        Description: This method is used to preprocess the image. It sets default values and calculates a
+        search heuristic to find the best matches for the image.
+        """
         self.original_values = cv.imread(source_path).astype(np.int16)
         # insert a row of default values at the top of the image
         self.original_values = np.insert(self.original_values, 0, self.DEFAULT_ROW_VALUE, axis=0)
@@ -180,11 +181,8 @@ class NNCompressor:
                         # add the indexes to the mask
                         filled_mask = add_to_mask(filled_mask, accepted_col_indexes, block_size)
             # fill the rest of the row with the single pixel matches
-            # get remaining indexes
             remaining_indexes = np.where(filled_mask == 0)[0]
-            # every channel has an index in the row
-            # select every third index in remaining_indexes starting with the first index
-            # to find the values for a single pixel
+            # get the first index of every r,g,b pixel
             remaining_indexes = remaining_indexes[::3]
             diffs = list(get_diffs(row_diffs.flatten(), remaining_indexes, 3))
             if diffs:
@@ -193,13 +191,14 @@ class NNCompressor:
                 row_matches = np.array([a_set.vectors[index] for index in indices])
                 self.add_lookup_indexes(row_matches, remaining_indexes)
                 self.match_counter[-2] += len(remaining_indexes)
-                # add to row queue
                 row_queue = add_matches(row_queue, np.array(row_matches), np.array(remaining_indexes), 3)
-            # sort self.row_lookup_indexes keys and add the values to self.compressed_indexes
+            # sort by column index and add the vector indexes in the correct order for compression
             self.compressed_indexes += [self.row_lookup_indexes[key] for key in sorted(self.row_lookup_indexes.keys())]
+            # add the row_queue to the compressed values
             self.compressed_values[row_idx, :] = np.clip(self.compressed_values[row_idx - 1, :] - row_queue, self.clip_min, self.clip_max)
 
     def add_lookup_indexes(self, matches, col_indexes):
+        # adds the lookup indexes for the matches to self.row_lookup_indexes
         lookup_indexes = [self.lookup_table.index_dict[tuple(x)] for x in matches]
         for j in range(len(lookup_indexes)):
             self.row_lookup_indexes[col_indexes[j]] = lookup_indexes[j]
@@ -251,8 +250,6 @@ class NNCompressor:
         values = self.matches
         # indexes = [self.lookup_table.index_dict[tuple(x)] for x in values]
         indexes = self.compressed_indexes
-        decompressed_vectors = [self.lookup_table.index_dict_reverse[x] for x in indexes]
-        #print("decompressed vectors:", decompressed_vectors)
         indexes = np.array(indexes)
         max_index = self.lookup_table.max_index
         # get the number of bits needed to represent the largest index
@@ -280,27 +277,6 @@ class NNCompressor:
         self.compressed_length = len(huff_compressed)
         file_info = huff_compressed + remaining_bits
         return file_info
-
-    def approximate_top_values(self, row_idx, col_idx, destination_values):
-        """
-        Description: This method is used to create new values that close to the actual values of the current row.
-        By using the previous values in the row. Used for both compression and decompression.
-        :param row_idx:
-        :param col_idx:
-        :param destination_values:  the array of values that need to be approximated.
-        :return:
-        """
-        max_block_size = self.lookup_table.max_block_size
-        if self.width - col_idx < max_block_size:
-            max_block_size = self.width - col_idx
-        if col_idx == 0:
-            # if we're at the beginning of the row, use the default row value
-            values = [self.DEFAULT_ROW_VALUE] * 3
-        else:
-            values = destination_values[row_idx, col_idx - 3:col_idx].tolist()  # get the previous three values
-        # fill neighbors with values from previous row, values is a list of three values that are repeated to fill
-        approximate_neighbors = [values[j] for i in range(max_block_size // 3) for j in range(3)]
-        destination_values[row_idx - 1, col_idx:col_idx + max_block_size] = approximate_neighbors
 
     def decompress(self, file_name=''):
         decompressed_matches, decompressed_indexes = self.decompress_file(file_name, self.lookup_table)
