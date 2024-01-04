@@ -153,29 +153,22 @@ class NNCompressor:
                     a_set = self.lookup_table.set_list[i]
                     block_size = a_set.block_size
                     # get the column indexes whose blocks won't overlap with any other previously added blocks
-                    unfilled_indexes = check_for_overlap(filled_mask, np.array(col_indexes), block_size)
+                    unfilled_indexes = check_if_filled(filled_mask, np.array(col_indexes), block_size)
                 if col_indexes and unfilled_indexes:
                     # get the diffs for the valid indexes in the row
-                    diffs = get_diffs(row_diffs, np.array(unfilled_indexes), block_size)
+                    diffs = get_diffs(row_diffs.flatten(), np.array(unfilled_indexes), block_size)
                     # find the closest matches for the diffs
                     distances, vector_indexes = a_set.get_matches(diffs)
                     row_matches = np.array([a_set.vectors[index] for index in vector_indexes])
                     row_match_dict = {unfilled_indexes[m]: row_matches[m] for m in range(len(unfilled_indexes))}
                     # check to see if any are under the error threshold
-                    # indexes_under_threshold is a list of the indexes from distances/indices/valid_indexes/diffs/row_matches where the error is under the threshold
+                    # indexes_under_threshold is a list of the indexes from distances where error is under threshold
                     indexes_under_threshold = np.where(distances < self.error_threshold)[0]
                     if len(indexes_under_threshold) > 0:
-                        # get the column indexes of the matches where the error is under the threshold
+                        # get the column indexes of the matches where the error is under threshold
                         under_thresh_col_indexes = np.array(unfilled_indexes)[indexes_under_threshold]
-                        # get the matches for the indexes where the error is under the threshold
-                        cur_cutoff = 0
-                        non_overlapping_indexes = []
-                        for k, idx in enumerate(under_thresh_col_indexes):
-                            if idx < cur_cutoff:
-                                pass
-                            else:
-                                non_overlapping_indexes.append(k)
-                                cur_cutoff = idx + block_size - 1
+                        # remove indexes with overlapping blocks
+                        non_overlapping_indexes = get_non_overlapping(under_thresh_col_indexes, block_size)
                         # get the column indexes of the matches where the blocks don't overlap.
                         accepted_col_indexes = under_thresh_col_indexes[non_overlapping_indexes]
                         # get the matches for the accepted column indexes
@@ -193,7 +186,7 @@ class NNCompressor:
             # select every third index in remaining_indexes starting with the first index
             # to find the values for a single pixel
             remaining_indexes = remaining_indexes[::3]
-            diffs = get_diffs(row_diffs, remaining_indexes, 3)
+            diffs = list(get_diffs(row_diffs.flatten(), remaining_indexes, 3))
             if diffs:
                 a_set = self.lookup_table.set_list[-1]
                 distances, indices = a_set.get_matches(diffs)
@@ -390,41 +383,48 @@ class NNCompressor:
 
 
 @jit(nopython=True)
-def check_for_overlap(mask_1, indexes, block_size):
+def check_if_filled(mask_1, indexes, block_size):
     valid_indexes = []
-    for idx in indexes:
+    for i, idx in enumerate(indexes):
         # Ensure that none of the indexes in the block are already in the mask
         if not np.any(mask_1[idx:idx + block_size]):
             valid_indexes.append(idx)
     return valid_indexes
 
 
-#@jit(nopython=True)
+@jit(nopython=True)
 def get_diffs(row, indexes, block_size):
-    row = row.flatten()
-    diffs = []
-    for idx in indexes:
-        diffs.append(row[idx:idx + block_size])
+    diffs = np.zeros((len(indexes), block_size))
+    for i, idx in enumerate(indexes):
+        diffs[i] = row[idx:idx + block_size]
     return diffs
 
 
-#@jit(nopython=True)
+@jit(nopython=True)
 def add_to_mask(mask, indexes, block_size):
     for idx in indexes:
         mask[idx:idx + block_size] = True
     return mask
 
 
-#@jit(nopython=True)
+@jit(nopython=True)
 def add_matches(row, matches, indexes, block_size):
     # indexes are the column indexes of the matches
     # matches are the vector matches for the block_size
     for i, idx in enumerate(indexes):
-        #match = matches[i*block_size:i*block_size+block_size]
         row[idx:idx + block_size] = matches[i]
     return row
 
-"""
-        self.original_values = [[[0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
-                                [[0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0,  0,  0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]]
-"""
+
+#@jit(nopython=True)
+def get_non_overlapping(col_indexes, block_size):
+    cur_cutoff = 0
+    non_overlapping_indexes = []
+    adj = block_size - 1
+    for k, idx in enumerate(col_indexes):
+        if idx < cur_cutoff:
+            pass
+        else:
+            non_overlapping_indexes.append(k)
+            cur_cutoff = idx + adj
+    return non_overlapping_indexes

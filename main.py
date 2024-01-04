@@ -29,11 +29,12 @@ def demo():
     #source_path = f"""images/test/black.png"""
     save_path = f"""bins/test/{image}.bin"""
     error_threshold = 5.8
+    search_depth = 1000  # controls the thoroughness of the search, higher values are slower
     make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 
     print("compressing image")
     compressed = NNCompressor()
-    compressed.compress('images/test/reference.png', save_path, error_threshold)
+    compressed.compress('images/test/reference.png', save_path, error_threshold, search_depth)
     # save the regenerated image
     save_image(compressed.compressed_values, "images/test/test.png")
     del compressed
