@@ -64,11 +64,8 @@ class NNCompressor:
         self.clip_min = min(self.original_values.flatten())
         self.clip_max = max(self.original_values.flatten())
 
-        start = time.time()
         self.get_best_matches()
-        end = time.time()
-        print("time to get best matches", end - start)
-        print("specials:", self.specials)
+
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
 

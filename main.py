@@ -24,11 +24,11 @@ def demo():
     crop_size = 450
     crop_offset = 150
     crop_image = False
-    image = "19"
+    image = "16"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
-    error_threshold = 5.8
-    search_depth = 1000  # controls the thoroughness of the search, higher values are slower
+    error_threshold = 1
+    search_depth = 5000  # controls the thoroughness of the search, higher values are slower
     # make a lossless reference image that can be used to check the compression quality
     make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 
