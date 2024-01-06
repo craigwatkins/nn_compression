@@ -33,7 +33,7 @@ class NNCompressor:
         self.width = 0
         self.search_depth = 1
         self.decompressed_values = None
-        self.max_compressed_bit_size = 14
+        self.max_compressed_bit_size = 16
         self.compressed_length = 0
         self.uncompressed_bit_size = 0
         self.compressed_path = ''
@@ -255,6 +255,7 @@ class NNCompressor:
         if self.max_compressed_bit_size < num_bits:
             compressed_bit_size = self.max_compressed_bit_size
             self.uncompressed_bit_size = num_bits - compressed_bit_size
+            print("Not all bit are being compressed")
             # if the number of bits needed to represent the largest index is greater than the max compressed bit length
             # when we will need to deal with uncompressed bits
             # get the remaining bits (the least significant bits) and add them to a new list

@@ -27,8 +27,10 @@ def demo():
     image = "16"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
-    error_threshold = 1
-    search_depth = 5000  # controls the thoroughness of the search, higher values are slower
+    # error_threshold controls the quality of the compression - lowering error threshold increases quality
+    error_threshold = 3.6
+    # search_depth controls the thoroughness of the search - higher values are slower and may improve compression ratio
+    search_depth = 1500
     # make a lossless reference image that can be used to check the compression quality
     make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 

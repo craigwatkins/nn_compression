@@ -9,4 +9,5 @@ def create_lookup_table():
     sample_sets[-1] = sample_sets[-1][:-3]
     index_sets = [IndexedSet(x) for x in sample_sets]
     lookup_table_1 = LookupTable(index_sets)
+    print("lookup table max index", lookup_table_1.max_index)
     return lookup_table_1
