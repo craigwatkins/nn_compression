@@ -24,11 +24,11 @@ def demo():
     crop_size = 450
     crop_offset = 150
     crop_image = False
-    image = "16"
+    image = "19"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
     # error_threshold controls the quality of the compression - lowering error threshold increases quality
-    error_threshold = 3.6
+    error_threshold = 3
     # search_depth controls the thoroughness of the search - higher values are slower and may improve compression ratio
     search_depth = 1500
     # make a lossless reference image that can be used to check the compression quality
