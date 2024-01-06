@@ -31,7 +31,7 @@ class NNCompressor:
         self.height = 0
         self.width = 0
         self.decompressed_values = None
-        self.max_compressed_bit_size = 14
+        self.max_compressed_bit_size = 15
         self.compressed_length = 0
         self.uncompressed_bit_size = 0
         self.compressed_path = ''
