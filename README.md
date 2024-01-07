@@ -1,7 +1,7 @@
 # Random Nearest Neighbor Image Compression (RNNIC)
 
 ## Introduction
-This project introduces a novel technique in image compression, named Random Nearest Neighbor Compression (RNNIC). This image compression algorithm leverages a relatively small lookup table of random samples to meet or exceed JPEG compression rates for high quality images.
+This project introduces a novel technique in image compression, named Random Nearest Neighbor Image Compression (RNNIC). This image compression algorithm leverages a relatively small lookup table of random samples to meet or exceed JPEG compression rates for high quality images.
 
 ## Why it Works
 Early forms of image compression, such as GIFs, use color palettes to reduce the amount of information used to represent an image by selecting a few representative colors specific to that image. RNNIC uses a palette of the differences between neighboring pixels instead. This allows the palette to represent a wide array of colors of varying hues, intensities and saturations with a comparatively small amount of values.
