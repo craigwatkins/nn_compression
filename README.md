@@ -17,8 +17,6 @@ The project includes two scripts:
 - `demo.py`: Demonstrates both compression and decompression for a single image.
 - `kodak_test.py`: Compresses images in the Kodak dataset and compares them to JPEG versions.
 
-## Installation and Setup
-(Include steps for installation, setup, and any dependencies required.)
 
 # Installation Guide
 
@@ -80,6 +78,3 @@ For more help, refer to the documentation of the respective packages or reach ou
 
 
 ---
-
-(Consider adding any additional sections like FAQs, Background and Motivation, Literature References, Testimonials, or Community and Support information.)
-
