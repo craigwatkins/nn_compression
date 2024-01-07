@@ -44,33 +44,33 @@ def calculate_psnr(original_path, compressed):
 def compress_and_compare():
     images = get_images("images/kodak")
     error_thresholds = [0.0]*25
-    error_thresholds[0] = 3.8
-    error_thresholds[1] = 6
-    error_thresholds[2] = 4.6
-    error_thresholds[3] = 5.1
-    error_thresholds[4] = 6.1
-    error_thresholds[5] = 4.3
-    error_thresholds[6] = 4.7
-    error_thresholds[7] = 6.3
-    error_thresholds[8] = 3.8
-    error_thresholds[9] = 4.1
-    error_thresholds[10] = 4.1
-    error_thresholds[11] = 3.8
-    error_thresholds[12] = 5.5
-    error_thresholds[13] = 6
-    error_thresholds[14] = 6
-    error_thresholds[15] = 0
-    error_thresholds[16] = 3.4
-    error_thresholds[17] = 5.6
-    error_thresholds[18] = 4.0
-    error_thresholds[19] = 5.6
-    error_thresholds[20] = 4.4
-    error_thresholds[21] = 5.4
-    error_thresholds[22] = 4.2
-    error_thresholds[23] = 6.5
+    error_thresholds[0] = 4.3
+    error_thresholds[1] = 6.6
+    error_thresholds[2] = 5.3
+    error_thresholds[3] = 5.5
+    error_thresholds[4] = 6.7
+    error_thresholds[5] = 4.9
+    error_thresholds[6] = 5.1
+    error_thresholds[7] = 6.7
+    error_thresholds[8] = 4.3
+    error_thresholds[9] = 4.5
+    error_thresholds[10] = 4.8
+    error_thresholds[11] = 4.4
+    error_thresholds[12] = 6
+    error_thresholds[13] = 7.2
+    error_thresholds[14] = 6.3
+    error_thresholds[15] = 3.7
+    error_thresholds[16] = 4.2
+    error_thresholds[17] = 6.1
+    error_thresholds[18] = 4.5
+    error_thresholds[19] = 6.2
+    error_thresholds[20] = 5.1
+    error_thresholds[21] = 6
+    error_thresholds[22] = 4.8
+    error_thresholds[23] = 7.7
     image_settings = [[] for i in range(len(images))]
     start = 0
-    stop = 23
+    stop = 24
     for i, image in enumerate(images):
         if i < start:
             continue
@@ -85,11 +85,17 @@ def compress_and_compare():
         compressed_size = os.path.getsize(f"bins/test/{image[1]}.bin")
         image_settings[i] = (image[1], psnr, psnr_jpeg, error_thresholds[i], compressed_size, jpeg_size)
         image = image_settings[i]
-        print("Img:", i, "| Quality (+):", round(image[1] - image[2], 3), "| Error thresh:",
+        print("Img:", i, "| PSNR Diff:", round(image[1] - image[2], 3), "| Error thresh:",
               image[3], " | Size diff:", image[4] - image[5], "bytes", "| Size ratio:", round(image[4] / image[5], 3))
 
         if i >= stop:
             break
+    total_jpeg_size = sum([x[5] for x in image_settings if x])
+    total_compressed_size = sum([x[4] for x in image_settings if x])
+    print("Total JPEG size:", total_jpeg_size, "bytes")
+    print("Total compressed size:", total_compressed_size, "bytes")
+    print("Percentage of JPEG Size:", round(total_compressed_size / total_jpeg_size, 3)*100, "%")
+
 
 
 

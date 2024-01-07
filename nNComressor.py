@@ -42,6 +42,7 @@ class NNCompressor:
         self.row_matches = []
         self.block_index_sets = []
         self.row_lookup_indexes = {}
+        self.transposed = False
 
     def get_lookup_table(self):
         """
@@ -73,7 +74,7 @@ class NNCompressor:
         header_obj = Header()
         header = header_obj.build_header([self.compressed_values.shape[0], self.compressed_values.shape[1],
                                           self.compressed_length, self.uncompressed_bit_size,
-                                          self.clip_min, self.clip_max])
+                                          self.clip_min, self.clip_max,self.transposed])
         # save the compressed image
         pb.write_padded_bytes(header + image_data, self.compressed_path)
         # print("match counter:", self.match_counter)
@@ -81,6 +82,9 @@ class NNCompressor:
         # reshape compressed values for image display
         self.compressed_values = self.compressed_values.reshape(self.compressed_values.shape[0],
                                                                 self.compressed_values.shape[1] // 3, 3)
+        # transpose if necessary
+        if self.transposed:
+            self.compressed_values = np.transpose(self.compressed_values, (1, 0, 2))
 
         return self.compressed_values
 
@@ -90,11 +94,25 @@ class NNCompressor:
         search heuristic to find the best matches for the image.
         """
         self.original_values = cv.imread(source_path).astype(np.int16)
-        # insert a row of default values at the top of the image
+        # transpose the image and see if the sum of diffs is smaller than the sum of diffs for the original image
+        # this can be used as a heuristic to determine which way is easier to compress
+        transposed = np.transpose(self.original_values, (1, 0, 2))
+        transposed = np.insert(transposed, 0, self.DEFAULT_ROW_VALUE, axis=0)
         self.original_values = np.insert(self.original_values, 0, self.DEFAULT_ROW_VALUE, axis=0)
+        transposed_diffs = transposed[1:] - transposed[:-1]
+        top_diffs = self.original_values[1:] - self.original_values[:-1]
+        transposed_diffs_sum = np.sum(np.abs(transposed_diffs))
+        top_diffs_sum = np.sum(np.abs(top_diffs))
+        if transposed_diffs_sum < top_diffs_sum:
+            # use the transposed image
+            self.original_values = transposed
+            top_diffs = transposed_diffs
+            self.transposed = True
+        # insert a row of default values at the top of the image
+
         self.height = self.original_values.shape[0]
         self.width = self.original_values.shape[1]
-        top_diffs = self.original_values[1:] - self.original_values[:-1]
+
         top_diffs_flat = top_diffs.reshape(top_diffs.shape[0]*top_diffs.shape[1], -1)
         top_diff_sizes = np.linalg.norm(top_diffs_flat, axis=1)
         threshold_mults = [3, 3, 3, 3, self.search_depth, self.search_depth, self.search_depth]
@@ -294,6 +312,7 @@ class NNCompressor:
         self.width = header_values['width']
         self.clip_min = header_values['clip_min']
         self.clip_max = header_values['clip_max']
+        self.transposed = header_values['transposed']
         compressed_bit_length = header_values['length']
         uncompressed_bit_size = header_values['uncompressed_bit_size']
         first_bits = full_file[header_length:header_length + compressed_bit_length]
@@ -354,6 +373,9 @@ class NNCompressor:
         # reshape to 3 channels for image display
         self.decompressed_values = decompressed_values.reshape(decompressed_values.shape[0],
                                                                decompressed_values.shape[1] // 3, 3)
+        # transpose if necessary
+        if self.transposed:
+            self.decompressed_values = np.transpose(self.decompressed_values, (1, 0, 2))
 
 
 @jit(nopython=True)

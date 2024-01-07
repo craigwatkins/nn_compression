@@ -322,7 +322,7 @@ class HuffmanCoding:
             header = self.build_file_header(data, compress_lengths, num_lengths)
             canonical_dict = ''.join(compress_lengths) + ''.join(sorted_symbols)
             file_info = header + canonical_dict + encoded_text
-            print('dictionary size: ', len(canonical_dict) / 8, ' bytes')
+            #print('dictionary size: ', len(canonical_dict) / 8, ' bytes')
             #print("total compressed size: ",
                   #(len(header) + len(encoded_text) + len(canonical_dict)) / 8, 'bytes')
         else:
