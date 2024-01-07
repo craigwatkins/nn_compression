@@ -1,16 +1,16 @@
-# Random Nearest Neighbor Compression (RNNC)
+# Random Nearest Neighbor Image Compression (RNNIC)
 
 ## Introduction
-This project introduces a novel technique in image compression, named Random Nearest Neighbor Compression (RNNC). This image compression algorithm leverages a relatively small lookup table of random samples to meet or exceed JPEG compression rates for high quality images.
+This project introduces a novel technique in image compression, named Random Nearest Neighbor Compression (RNNIC). This image compression algorithm leverages a relatively small lookup table of random samples to meet or exceed JPEG compression rates for high quality images.
 
 ## Why it Works
-Early forms of image compression, such as GIFs, used color palettes to reduce the amount of information used to represent an image by selecting a few representative colors specific to that image. RNNC uses a palette of the differences between neighboring pixels instead. This allows the palette to represent a wide array of colors of varying hues, intensities and saturations with a comparatively small amount of values.
+Early forms of image compression, such as GIFs, use color palettes to reduce the amount of information used to represent an image by selecting a few representative colors specific to that image. RNNIC uses a palette of the differences between neighboring pixels instead. This allows the palette to represent a wide array of colors of varying hues, intensities and saturations with a comparatively small amount of values.
 
-Unlike the distribution of colors, which varies greatly from image to image depending upon the subject matter, the differences between pixels is often quite similar across images. Thus, a random sampling from a variety of images can give a very flexible palette. Not only is this palette of differences relatively small, but it can be shared across innumerable images - it does not have to be redefined for each one.
+Unlike the distributions of colors, which vary greatly from image to image depending upon the subject matter, the differences between pixels are often quite similar across images. Thus, a random sampling from a variety of images can give a very flexible palette. Not only is this palette of differences relatively small, but it can be shared across innumerable images - it does not have to be redefined for each one.
 
 
 ## How it Works
-RNNC employs a KD tree for finding the nearest neighbor in the differences palette and uses Huffman compression on the index values. In principle, any sort of nearest neighbor algorithm can be effective and could be switched out rather easily. Approximate methods such as [ANNOY](https://pypi.org/project/annoy/) or [FAISS](https://ai.meta.com/tools/faiss/) could also be employed to increase performance.
+RNNIC employs a KD tree for finding the nearest neighbor in the differences palette and uses Huffman compression on the index values. In principle, any sort of nearest neighbor algorithm can be effective and could be switched out rather easily. Approximate methods such as [ANNOY](https://pypi.org/project/annoy/) or [FAISS](https://ai.meta.com/tools/faiss/) could also be employed to increase performance.
 
 A greedy algorithm is used to match the largest string of pixels it can while staying under a given error threshold. Kernels are used to identify likely strings of pixels that will meet the error threshold in order to reduce the number of comparisons required.
 
@@ -21,7 +21,7 @@ For the purposes of this proof of concept, the images from the [Kodak dataset](h
 
 For each images in the Kodak set, the compression settings were adjusted to achieve the same Peak Signal to Noise Ratio (PSNR) as the 100% quality JPEG version of the image. The result was that every single image achieved a higher compression ratio vs. JPEG and the overall compression for the Kodak image set was improved by 16%. 
 
-In the current proof of concept implementation, RNNC does not degrade as gracefully as JPEG, so it’s advantages only appear at the very highest quality settings.
+In the current proof of concept implementation, RNNIC does not degrade as gracefully as JPEG, so it’s advantages only appear at the very highest quality settings.
 
 
 ## How to Use
