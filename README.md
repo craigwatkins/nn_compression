@@ -10,7 +10,7 @@ Unlike the distributions of colors, which vary greatly from image to image depen
 
 
 ## How it Works
-RNNIC employs a KD tree for finding the nearest neighbor in the differences palette and uses Huffman compression on the index values. In principle, any sort of nearest neighbor algorithm can be effective and could be switched out rather easily. Approximate methods such as [ANNOY](https://pypi.org/project/annoy/) or [FAISS](https://ai.meta.com/tools/faiss/) could also be employed to increase performance.
+This implementation of RNNIC employs a KD tree for finding the nearest neighbor in the differences palette and uses Huffman compression on the index values. In principle, any sort of nearest neighbor algorithm can be effective and methods could be switched out rather easily. Approximate methods such as [ANNOY](https://pypi.org/project/annoy/) or [FAISS](https://ai.meta.com/tools/faiss/) could also be employed to increase performance.
 
 A greedy algorithm is used to match the largest string of pixels it can while staying under a given error threshold. Kernels are used to identify likely strings of pixels that will meet the error threshold in order to reduce the number of comparisons required.
 
