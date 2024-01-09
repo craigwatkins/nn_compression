@@ -36,7 +36,7 @@ There are a number of ways provided to explore this project:
     - `save_path`: The path to the binary file to save the compressed data to.
     - `error_threshold`: The maximum error allowed for matches before trying a smaller pixel string size. Decreasing this value will usually increase quality at the expense of compression ratio.
     - `search_depth`: This controls the threshold for identifying possible matches. A higher value usually increases the compression ratio, but also increases the time required to compress the image.
-- `decompress`: Decompresses a binary file and saves the decompressed image.
+- `decompress`: Decompresses a binary file and saves the decompressed data to a lossless PNG image for inspection.
   - Arguments:
     - `compressed_image_path`: The path to the binary file to be decompressed.
     - `save_path`: The path to the image to save the decompressed data to.
