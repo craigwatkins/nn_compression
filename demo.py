@@ -1,6 +1,6 @@
 import cv2
 from helpers import save_image, calculate_psnr, save_jpeg
-from nNComressor import NNCompressor
+from rnnic import NNCompressor
 
 
 def make_reference_image(image_path, crop_size=100, crop_offset=0, file_path="images/test/reference", crop_image=True):
