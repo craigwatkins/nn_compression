@@ -33,7 +33,7 @@ def main():
     # Subparser for the decompress command
     decompress_parser = subparsers.add_parser('decompress', help='Decompress an image')
     decompress_parser.add_argument("compressed_image_path", help="Path to the compressed image")
-    decompress_parser.add_argument("output_path", help="Path to save the decompressed image")
+    decompress_parser.add_argument("save_path", help="Path to save the decompressed image")
     decompress_parser.set_defaults(func=decompress)
 
     # Parse arguments
