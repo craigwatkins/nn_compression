@@ -16,12 +16,12 @@ In principle, any sort of nearest neighbor algorithm can be effective and method
 
 A greedy algorithm is used to match the largest string of pixels it can while staying under a given error threshold. Kernels are used to identify likely strings of pixels that will meet the error threshold in order to reduce the number of comparisons required.
 
-The current implementation requires a significant amount of computations per pixel, but has a linear time complexity with regard to image size. Decompression is straightforward and fast, primarily consisting of a hash table lookup after Huffman decompression.
+The current implementation requires a significant amount of computations per pixel for compression, but has a linear time complexity with regard to image size. Decompression is straightforward and fast, primarily consisting of a hash table lookup after Huffman decompression.
 
 ## Results
-To evaluate the effectiveness of this proof of concept, the images from the [Kodak dataset](https://r0k.us/graphics/kodak/), originally used to evaluate PNG compression, were employed. It is important to note, that the lookup table pixel samples were derived from a completely different set - the [Flickr 8k Dataset](https://www.kaggle.com/datasets/adityajn105/flickr8k). Also, the total size of the palette when stored in database format, is less than 400 kilobytes. For comparison, storing the image data from a single image from the Kodak dataset in a similar, uncompressed fashion would take over 9 megabytes. 
+To evaluate the effectiveness of this proof of concept, the images from the [Kodak dataset](https://r0k.us/graphics/kodak/), originally used to evaluate PNG compression, were employed. It is important to note, that the lookup table pixel samples were derived from a completely different set - the [Flickr 8k Dataset](https://www.kaggle.com/datasets/adityajn105/flickr8k) so there is no data leakage from the samples themselves. Also, the total size of the palette when stored in database format, is less than 400 kilobytes. For comparison, storing the image data from a single image from the Kodak dataset in a similar, uncompressed fashion would take over 9 megabytes. 
 
-For each images in the Kodak set, the compression settings were adjusted to achieve the same Peak Signal to Noise Ratio (PSNR) as the 100% quality JPEG version of the image. The result was that every single image achieved a higher compression ratio vs. JPEG and the overall compressed size of the Kodak dataset was improved by 16%. 
+For each images in the Kodak set, the compression settings were adjusted to achieve at least the same Peak Signal to Noise Ratio (PSNR) as the 100% quality JPEG version of the image. The result was that every single image achieved a higher compression ratio vs. JPEG and **the overall compressed size of the Kodak dataset was improved by 16%**. 
 
 In the current proof of concept implementation, RNNIC does not degrade as gracefully as JPEG, so it’s advantages only appear at the very highest quality settings.
 
