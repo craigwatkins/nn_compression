@@ -1,7 +1,7 @@
 # Random Nearest Neighbor Image Compression (RNNIC)
 
 ## Introduction
-This project is a proof of concept for a novel technique in image compression, Random Nearest Neighbor Image Compression (RNNIC). This image compression algorithm leverages a relatively small lookup table of random samples to meet or exceed JPEG compression rates for high quality images.
+This project is a proof of concept for a novel technique in image compression, Random Nearest Neighbor Image Compression (RNNIC). This image compression algorithm leverages a relatively small lookup table of random samples to exceed JPEG compression rates at very high quality settings.
 
 ## Why it Works
 From the earliest days of image compression, color palettes have been used to compress images by selecting a few representative colors specific to that image. RNNIC uses a palette of the _differences_ between neighboring pixels instead. This allows the palette to represent a wide array of colors of varying hues, intensities and saturations with a comparatively small amount of values.
@@ -19,7 +19,7 @@ A greedy algorithm is used to match the largest string of pixels it can while st
 The current implementation requires a significant amount of computations per pixel for compression, but has a linear time complexity with regard to image size. Decompression is straightforward and fast, primarily consisting of a hash table lookup after Huffman decompression.
 
 ## Results
-To evaluate the effectiveness of this proof of concept, the images from the [Kodak dataset](https://r0k.us/graphics/kodak/), originally used to evaluate PNG compression, were employed. It is important to note, that the lookup table pixel samples were derived from a completely different set - the [Flickr 8k Dataset](https://www.kaggle.com/datasets/adityajn105/flickr8k) so there is no data leakage from the samples themselves. Also, the total size of the palette when stored in database format, is less than 400 kilobytes. For comparison, storing the image data from a single image from the Kodak dataset in a similar, uncompressed fashion would take over 9 megabytes. 
+To evaluate the effectiveness of this proof of concept, the images from the [Kodak dataset](https://r0k.us/graphics/kodak/), originally used to evaluate PNG compression, were employed. It is important to note, that the lookup table pixel difference samples were derived from a completely different set, the [Flickr 8k Dataset](https://www.kaggle.com/datasets/adityajn105/flickr8k), so there was no data leakage from the samples themselves. Also, the total size of the palette when stored in database format, is less than 400 kilobytes. For comparison, storing the image data from a single image from the Kodak dataset in a similar, uncompressed fashion would take well over a megabyte. 
 
 For each images in the Kodak set, the compression settings were adjusted to achieve at least the same Peak Signal to Noise Ratio (PSNR) as the 100% quality JPEG version of the image. The result was that every single image achieved a higher compression ratio vs. JPEG and **the overall compressed size of the Kodak dataset was improved by 16%**. 
 
