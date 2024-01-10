@@ -1,12 +1,12 @@
 # Random Nearest Neighbor Image Compression (RNNIC)
 
 ## Introduction
-This project is a proof of concept for a novel technique in image compression, Random Nearest Neighbor Image Compression (RNNIC). This image compression algorithm leverages a relatively small lookup table of random samples to exceed JPEG compression rates at very high quality settings.
+This project is a proof of concept for a novel technique in image compression, Random Nearest Neighbor Image Compression (RNNIC). This algorithm leverages a relatively small lookup table of random samples to exceed JPEG compression rates at very high quality settings.
 
 ## Why it Works
 From the earliest days of image compression, color palettes have been used to compress images by selecting a few representative colors specific to that image. RNNIC uses a palette of the _differences_ between neighboring pixels instead. This allows the palette to represent a wide array of colors of varying hues, intensities and saturations with a comparatively small amount of values.
 
-Unlike the distributions of colors, which vary greatly from image to image depending upon the subject matter, the differences between pixels are often quite similar across images. Thus, a random sampling from a variety of images can give a very flexible palette. Not only is this palette of differences relatively small, but it can be shared across innumerable images - it does not have to be redefined for each one.
+Unlike the distributions of colors, which vary greatly from image to image depending upon the subject matter, the differences between pixels are often quite similar across images. Thus, a random sampling from a variety of images can give a very flexible palette. Not only is this palette of differences relatively small, but it can be shared across almost any image - it does not have to be redefined for each one.
 
 
 ## How it Works
@@ -14,7 +14,7 @@ This implementation of RNNIC employs a KD tree for finding the nearest neighbor 
 
 In principle, any sort of nearest neighbor algorithm can be effective and methods could be switched out rather easily. Approximate methods such as [ANNOY](https://pypi.org/project/annoy/) or [FAISS](https://ai.meta.com/tools/faiss/) could also be employed to increase performance.
 
-A greedy algorithm is used to match the largest string of pixels it can while staying under a given error threshold. Kernels are used to identify likely strings of pixels that will meet the error threshold in order to reduce the number of comparisons required.
+A greedy algorithm is used to match the largest string of pixels it can while staying under a given error threshold. The sums of nearby pixels are used to identify sets of pixels that will likely have a good match in order to reduce the number of comparisons required.
 
 The current implementation requires a significant amount of computations per pixel for compression, but has a linear time complexity with regard to image size. Decompression is straightforward and fast, primarily consisting of a hash table lookup after Huffman decompression.
 
