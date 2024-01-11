@@ -54,7 +54,15 @@ class NNCompressor:
     def compress(self, source_path, compressed_path, error_threshold=2, search_depth=5):
         """
         Description: This method is used to compress the image.
+        param: source_path: The path to the image to be compressed.
+        param: compressed_path: The path to the binary file to save the compressed data to.
+        param: error_threshold: The maximum error allowed for matches before trying a smaller pixel string size.
+        Decreasing this value will usually increase quality at the expense of compression ratio.
+        param: search_depth: This controls the threshold for identifying possible matches.
+        A higher value usually increases the compression ratio, but also increases
+        the time required to compress the image.
         """
+
         self.search_depth = search_depth
         self.compressed_path = compressed_path
         self.error_threshold = error_threshold
@@ -218,45 +226,6 @@ class NNCompressor:
         for j in range(len(lookup_indexes)):
             self.row_lookup_indexes[col_indexes[j]] = lookup_indexes[j]
 
-    def paeth_predictor(self, left, above, upper_left):
-        """
-        Description: This method is used to calculate the paeth value for a given vector.
-        :param left: left vector
-        :param above: above vector
-        :param upper_left: upper left vector
-        :return: the paeth value
-        """
-        p = left + above - upper_left
-        pa = abs(p - left)
-        pb = abs(p - above)
-        pc = abs(p - upper_left)
-        return np.where((pa <= pb) & (pa <= pc), left, np.where(pb <= pc, above, upper_left))
-
-    def find_special_match(self, col_idx):
-
-        # returns the special match if one is under the error threshold, otherwise returns an empty array
-        # find the paeth, average and left
-        left = self.compressed_values[self.row_idx, col_idx - 3:col_idx]
-        above = self.compressed_values[self.row_idx - 1, col_idx:col_idx + 3]
-        above_left = self.compressed_values[self.row_idx - 1, col_idx - 3:col_idx]
-        current_pixel = self.original_values[self.row_idx, col_idx:col_idx + 3]
-        above_and_left = left + above
-        paeth = self.paeth_predictor(left, above, above_left)
-        average = above_and_left // 2
-        specials = [paeth, average, left]
-        special_errors = np.linalg.norm(specials - current_pixel, axis=1)
-        # find the smallest error and its index
-        min_error_idx = np.argmin(special_errors)
-        min_error = special_errors[min_error_idx]
-        if min_error < self.error_threshold:
-            self.specials[min_error_idx][0] += 1
-            closest_index = min_error_idx
-            self.compressed_indexes.append(closest_index)
-            adjusted_match = above - specials[min_error_idx]
-            return adjusted_match
-        else:
-            return np.array([])
-
     def huff_compress(self):
         """
         Description: compress the first bits of values using Huffman compression
@@ -295,6 +264,11 @@ class NNCompressor:
         return file_info
 
     def decompress(self, file_name=''):
+        """
+        Description: This method is used to decompress the image.
+        :param file_name: The path to the binary file to be decompressed.
+        :return: None
+        """
         decompressed_matches, decompressed_indexes = self.decompress_file(file_name, self.lookup_table)
         # reconstruct the image
         self.rebuild_image(decompressed_matches)
