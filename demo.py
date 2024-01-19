@@ -28,7 +28,7 @@ def demo():
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
     # error_threshold controls the quality of the compression - lowering error threshold increases quality
-    error_threshold = 3.6
+    error_threshold = 6.4
     # search_depth controls the thoroughness of the search - higher values are slower and may improve compression ratio
     search_depth = 1500
     # make a lossless reference image that can be used to check the compression quality
@@ -49,6 +49,9 @@ def demo():
     # create a high quality jpeg image for comparison
     psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.jpeg")
     print("jpeg psnr", psnr_j)
+
+    psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.webp")
+    print("webp psnr", psnr_j)
     #psnr_j = calculate_psnr("images/test/reference.png", "images/test/verify.png")
 
 

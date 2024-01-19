@@ -7,6 +7,8 @@ def create_lookup_table():
     sample_sets = lookup_db.retrieve_sets()
     # remove the last elements of the last set to make room for special values
     sample_sets[-1] = sample_sets[-1][:-3]
+    # sort the sets in sample sets by the size of the vectors so that the largest vectors are first
+    sample_sets.sort(key=lambda x: len(x[0]), reverse=True)
     index_sets = [IndexedSet(x) for x in sample_sets]
     lookup_table_1 = LookupTable(index_sets)
     #print("lookup table max index", lookup_table_1.max_index)

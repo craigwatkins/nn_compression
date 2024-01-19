@@ -74,6 +74,7 @@ class NNCompressor:
         self.clip_max = max(self.original_values.flatten())
 
         self.get_best_matches()
+        print("match counter:", self.match_counter)
 
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
