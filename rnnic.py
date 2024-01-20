@@ -43,6 +43,9 @@ class NNCompressor:
         self.block_index_sets = []
         self.row_lookup_indexes = {}
         self.transposed = False
+        self.custom_tree = None
+        self.custom_dict = {}
+        self.custom_dict_rev = {}
 
     def get_lookup_table(self):
         """
@@ -70,6 +73,8 @@ class NNCompressor:
         self.compressed_values = np.zeros(self.original_values.shape, dtype=np.int32)
         # add an extra row at the top of compressed_values so that it can provide a basis for the first row
         self.compressed_values[0, :] = self.DEFAULT_ROW_VALUE
+        # add an extra three columns at the left of compressed_values so that it can provide a basis for the first column
+        self.compressed_values[:, :3] = self.DEFAULT_ROW_VALUE
         self.clip_min = min(self.original_values.flatten())
         self.clip_max = max(self.original_values.flatten())
 
@@ -78,6 +83,8 @@ class NNCompressor:
 
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
+        # remove the left columns of compressed_values, it's not actually part of the image
+        self.compressed_values = np.delete(self.compressed_values, np.s_[:3], axis=1)
 
         image_data = self.huff_compress()
         header_obj = Header()
@@ -103,21 +110,15 @@ class NNCompressor:
         search heuristic to find the best matches for the image.
         """
         self.original_values = cv.imread(source_path).astype(np.int16)
-        # transpose the image and see if the sum of diffs is smaller than the sum of diffs for the original image
-        # this can be used as a heuristic to determine which way is easier to compress
-        transposed = np.transpose(self.original_values, (1, 0, 2))
-        transposed = np.insert(transposed, 0, self.DEFAULT_ROW_VALUE, axis=0)
+
         self.original_values = np.insert(self.original_values, 0, self.DEFAULT_ROW_VALUE, axis=0)
-        transposed_diffs = transposed[1:] - transposed[:-1]
+        # add left columns with default values
+        self.original_values = np.insert(self.original_values, 0, self.DEFAULT_ROW_VALUE, axis=1)
+
         top_diffs = self.original_values[1:] - self.original_values[:-1]
-        transposed_diffs_sum = np.sum(np.abs(transposed_diffs))
-        top_diffs_sum = np.sum(np.abs(top_diffs))
-        if transposed_diffs_sum < top_diffs_sum:
-            # use the transposed image
-            self.original_values = transposed
-            top_diffs = transposed_diffs
-            self.transposed = True
-        # insert a row of default values at the top of the image
+
+
+        print("preprocessing")
 
         self.height = self.original_values.shape[0]
         self.width = self.original_values.shape[1]
@@ -155,7 +156,7 @@ class NNCompressor:
         self.original_values = self.original_values.reshape(self.height, -1)
         self.width = self.original_values.shape[1]
 
-    def get_best_matches(self):
+    def get_best_matches_old(self):
         """
         Description: This method is used to get the best matches to the original values of the differences between
         row pixel values. At every row, the compressed values are compared to the original values to create the new
@@ -221,6 +222,37 @@ class NNCompressor:
             # add the row_queue to the compressed values
             self.compressed_values[row_idx, :] = np.clip(self.compressed_values[row_idx - 1, :] - row_queue, self.clip_min, self.clip_max)
 
+    def get_best_matches(self):
+        a_set = self.lookup_table.set_list[-1]
+        a_set2 = self.lookup_table.set_list[0]
+        for row_idx in range(1, self.height):
+            for col_idx in range(3, self.width, 3):
+                left = self.compressed_values[row_idx, col_idx - 3:col_idx]
+                current = self.original_values[row_idx, col_idx:col_idx + 3]
+                top = self.compressed_values[row_idx - 1, col_idx:col_idx + 3]
+                avg = (top + left) // 2
+                diffs = avg - current
+                distance, index = a_set.get_matches(diffs)
+                match = a_set.vectors[index]
+                self.compressed_indexes.append(self.lookup_table.index_dict[tuple(match)])
+
+                #distance, index = self.custom_tree.query(diffs)
+                #match = self.custom_dict_rev[index]
+                #self.compressed_indexes.append(index)
+
+                """
+                new_diffs = diffs - match
+                distance, index = a_set2.get_matches(new_diffs)
+                new_match = np.array(a_set2.vectors[index])
+                adj_diffs = diffs - (np.array(match) + new_match)
+                if np.linalg.norm(adj_diffs) < np.linalg.norm(new_diffs):
+                    self.compressed_indexes.append(self.lookup_table.index_dict[tuple(new_match)])
+                    match = match + new_match
+                else:
+                    self.compressed_indexes.append(self.lookup_table.index_dict[(0, 0, 0)])
+                """
+                self.compressed_values[row_idx, col_idx:col_idx + 3] = np.clip(avg - match, self.clip_min, self.clip_max)
+
     def add_lookup_indexes(self, matches, col_indexes):
         # adds the lookup indexes for the matches to self.row_lookup_indexes
         lookup_indexes = [self.lookup_table.index_dict[tuple(x)] for x in matches]
@@ -236,6 +268,11 @@ class NNCompressor:
         # indexes = [self.lookup_table.index_dict[tuple(x)] for x in values]
         indexes = self.compressed_indexes
         indexes = np.array(indexes)
+        # select only the even indexes
+        indexes_evens = indexes[::2]
+        # select the odd indexes
+        indexes_odds = indexes[1::2]
+
         max_index = self.lookup_table.max_index
         # get the number of bits needed to represent the largest index
         num_bits = len(bin(max_index)[2:])
@@ -262,6 +299,12 @@ class NNCompressor:
         huff_compressed, encoded_list = huff.compress(diffs_decimals)
         self.compressed_length = len(huff_compressed)
         file_info = huff_compressed + remaining_bits
+        """
+        huff2 = HuffmanCoding()
+        huff_compressed2, encoded_list2 = huff2.compress(indexes_odds)
+        print("huff compressed of evens:", len(huff_compressed2)//8)
+        print("huff compressed of odds:", len(huff_compressed2)//8)
+        """
         return file_info
 
     def decompress(self, file_name=''):
@@ -399,3 +442,12 @@ def get_non_overlapping(col_indexes, block_size):
             non_overlapping_indexes.append(k)
             cur_cutoff = idx + adj
     return non_overlapping_indexes
+
+
+def get_centroids(k, samples):
+    from sklearn.cluster import KMeans
+    kmeans = KMeans(n_clusters=k, random_state=0, n_init=10)
+    clusters = kmeans.fit_predict(samples)
+    # Calculate centroids
+    centroids = kmeans.cluster_centers_
+    return centroids

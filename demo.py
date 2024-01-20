@@ -42,7 +42,7 @@ def demo():
     # Technically, there is no need to delete the compression object, as it is intended to be used multiple times.
     # This is just a precaution to ensure that there is no data leakage during development.
     del compressed
-    decompress_image(save_path)
+    #decompress_image(save_path)
 
     psnr_v = calculate_psnr("images/test/reference.png", "images/test/test.png")
     print("vector psnr", psnr_v)
@@ -50,8 +50,8 @@ def demo():
     psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.jpeg")
     print("jpeg psnr", psnr_j)
 
-    psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.webp")
-    print("webp psnr", psnr_j)
+    # psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.webp")
+    #print("webp psnr", psnr_j)
     #psnr_j = calculate_psnr("images/test/reference.png", "images/test/verify.png")
 
 
