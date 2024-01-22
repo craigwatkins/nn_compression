@@ -44,7 +44,7 @@ class NNCompressor:
         self.row_lookup_indexes = {}
         self.transposed = False
         self.custom_tree = None
-        self.custom_dict = {}
+        self.common_dict = {}
         self.custom_dict_rev = {}
 
     def get_lookup_table(self):
@@ -52,7 +52,12 @@ class NNCompressor:
         Description: This method is used to get the lookup tables.
         """
         from create_lookup_tables import create_lookup_table
+
+
+
         return create_lookup_table()
+
+
 
     def compress(self, source_path, compressed_path, error_threshold=2, search_depth=5):
         """
@@ -65,6 +70,19 @@ class NNCompressor:
         A higher value usually increases the compression ratio, but also increases
         the time required to compress the image.
         """
+        print("getting samples")
+        sample_size = 1
+        samples = sample_diffs('image_avg_diffs.db', num_images=8090, num_samples=200, sample_size=sample_size)
+        samples = samples.reshape(-1, sample_size * 3)  # flatten the last dimension
+        samples = set([tuple(x) for x in samples])
+        samples = list(samples)
+        samples = np.array(samples)
+        # remove all entries where the sum of the absolute values is more than 15
+        samples = samples[np.sum(np.abs(samples), axis=1) < 30]
+        a_set = self.lookup_table.set_list[-1]
+        distance, indices = a_set.get_matches(samples)
+        self.common_dict = {tuple(samples[i]): indices[i] for i in range(len(samples))}
+        print("common dict length:", len(self.common_dict))
 
         self.search_depth = search_depth
         self.compressed_path = compressed_path
@@ -80,11 +98,12 @@ class NNCompressor:
 
         self.get_best_matches()
         print("match counter:", self.match_counter)
-
         # remove the top row of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, 0, axis=0)
+        self.original_values = np.delete(self.original_values, 0, axis=0)
         # remove the left columns of compressed_values, it's not actually part of the image
         self.compressed_values = np.delete(self.compressed_values, np.s_[:3], axis=1)
+        self.original_values = np.delete(self.original_values, np.s_[:3], axis=1)
 
         image_data = self.huff_compress()
         header_obj = Header()
@@ -116,9 +135,6 @@ class NNCompressor:
         self.original_values = np.insert(self.original_values, 0, self.DEFAULT_ROW_VALUE, axis=1)
 
         top_diffs = self.original_values[1:] - self.original_values[:-1]
-
-
-        print("preprocessing")
 
         self.height = self.original_values.shape[0]
         self.width = self.original_values.shape[1]
@@ -223,8 +239,12 @@ class NNCompressor:
             self.compressed_values[row_idx, :] = np.clip(self.compressed_values[row_idx - 1, :] - row_queue, self.clip_min, self.clip_max)
 
     def get_best_matches(self):
+        import time
+        start = time.time()
+        common_matches = 0
         a_set = self.lookup_table.set_list[-1]
         a_set2 = self.lookup_table.set_list[0]
+
         for row_idx in range(1, self.height):
             for col_idx in range(3, self.width, 3):
                 left = self.compressed_values[row_idx, col_idx - 3:col_idx]
@@ -232,9 +252,15 @@ class NNCompressor:
                 top = self.compressed_values[row_idx - 1, col_idx:col_idx + 3]
                 avg = (top + left) // 2
                 diffs = avg - current
-                distance, index = a_set.get_matches(diffs)
+                if tuple(diffs) in self.common_dict:
+                    common_matches += 1
+                    index = self.common_dict[tuple(diffs)]
+                    self.compressed_indexes.append(index)
+                else:
+                    distance, index = a_set.get_matches(diffs)
                 match = a_set.vectors[index]
                 self.compressed_indexes.append(self.lookup_table.index_dict[tuple(match)])
+                self.matches.append(match)
 
                 #distance, index = self.custom_tree.query(diffs)
                 #match = self.custom_dict_rev[index]
@@ -252,6 +278,9 @@ class NNCompressor:
                     self.compressed_indexes.append(self.lookup_table.index_dict[(0, 0, 0)])
                 """
                 self.compressed_values[row_idx, col_idx:col_idx + 3] = np.clip(avg - match, self.clip_min, self.clip_max)
+        stop = time.time()
+        print("time:", stop - start)
+        print("common matches:", common_matches)
 
     def add_lookup_indexes(self, matches, col_indexes):
         # adds the lookup indexes for the matches to self.row_lookup_indexes
@@ -268,10 +297,22 @@ class NNCompressor:
         # indexes = [self.lookup_table.index_dict[tuple(x)] for x in values]
         indexes = self.compressed_indexes
         indexes = np.array(indexes)
-        # select only the even indexes
-        indexes_evens = indexes[::2]
-        # select the odd indexes
-        indexes_odds = indexes[1::2]
+        # get the number of occurrences for each index
+        unique, counts = np.unique(indexes, return_counts=True)
+        # create a dictionary of the indexes and their counts
+        index_dict = dict(zip(unique, counts))
+        # sort the dictionary by the counts
+        sorted_index_dict = {k: v for k, v in sorted(index_dict.items(), key=lambda item: item[1], reverse=True)}
+        print("sorted index dict", sorted_index_dict)
+        diff_indexes = [indexes[0]]
+        for i, index in enumerate(indexes):
+            if i > 0:
+                diff_indexes.append(index - indexes[i - 1])
+        #indexes = diff_indexes
+        #min_index = min(indexes)*-1
+        #indexes = [x + min_index for x in indexes]
+
+
 
         max_index = self.lookup_table.max_index
         # get the number of bits needed to represent the largest index
@@ -299,12 +340,7 @@ class NNCompressor:
         huff_compressed, encoded_list = huff.compress(diffs_decimals)
         self.compressed_length = len(huff_compressed)
         file_info = huff_compressed + remaining_bits
-        """
-        huff2 = HuffmanCoding()
-        huff_compressed2, encoded_list2 = huff2.compress(indexes_odds)
-        print("huff compressed of evens:", len(huff_compressed2)//8)
-        print("huff compressed of odds:", len(huff_compressed2)//8)
-        """
+
         return file_info
 
     def decompress(self, file_name=''):
@@ -451,3 +487,39 @@ def get_centroids(k, samples):
     # Calculate centroids
     centroids = kmeans.cluster_centers_
     return centroids
+
+
+def sample_diffs(db_name, num_images, num_samples, sample_size=1):
+    import sqlite3
+    import random
+    SEED = 42
+
+    height = 127
+    width = 127
+    # set random seed
+    random.seed(SEED)
+    # Connect to the database
+    connection = sqlite3.connect(db_name)
+    cursor = connection.cursor()
+
+    # Retrieve the diffs for a specified number of images
+    cursor.execute("SELECT diffs FROM images LIMIT ?", (num_images,))
+    rows = cursor.fetchall()
+
+    all_samples = []
+
+    for row in rows:
+        # Reshape the diff data to its original shape
+        diff_array = np.frombuffer(row[0], dtype=np.int16).reshape(height, width, 3)
+
+        for _ in range(num_samples):
+            # Randomly select a row
+            row_idx = random.randint(0, height-1)
+            # Ensure sample doesn't cross rows
+            if 128 - sample_size > 0:
+                start_col_idx = random.randint(0, width - sample_size)
+                sample = diff_array[row_idx, start_col_idx:start_col_idx + sample_size, :]
+                all_samples.append(sample)
+
+    connection.close()
+    return np.array(all_samples)

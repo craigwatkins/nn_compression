@@ -37,7 +37,7 @@ def insert_set(data):
 
 def retrieve_sets():
     # Connect to the SQLite database
-    conn = sqlite3.connect('lookup_table_avg_centroids.db')
+    conn = sqlite3.connect('lookup_table_centroids.db')
 
     # Retrieve all rows from the table
     cursor = conn.execute('SELECT block_size, num_entries, data FROM random_sets')
