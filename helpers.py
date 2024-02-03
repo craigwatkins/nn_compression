@@ -33,6 +33,35 @@ def calculate_psnr(original_path, compressed_path):
 
 
 
+def get_ssim(original_path, compressed_path):
+    from skimage import io, color
+    from skimage.metrics import structural_similarity as ssim
+
+    # Load the uncompressed and compressed images
+    uncompressed_image = io.imread(original_path)
+    compressed_image = io.imread(compressed_path)
+
+    # get the min and max of the uncompressed image
+    min_val = np.min(uncompressed_image)
+    max_val = np.max(uncompressed_image)
+
+    # Convert the images to grayscale
+    uncompressed_gray = color.rgb2gray(uncompressed_image)
+    compressed_gray = color.rgb2gray(compressed_image)
+
+    # Compute SSIM
+    ssim_index = ssim(uncompressed_gray, compressed_gray, data_range=max_val - min_val)
+    return ssim_index
+
+""""
+ssim_index = get_ssim("images/test/reference.png", "images/test/reference.jpeg")
+print("ssim", ssim_index)
+ssim_index = get_ssim("images/test/reference.png", "images/test/test.png")
+print("ssim", ssim_index)
+"""
+
+
+
 
 
 

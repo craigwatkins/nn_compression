@@ -19,8 +19,12 @@ class LookupTable:
         super_set = []
         for i, a_set in enumerate(self.set_list):
             super_set += a_set.vectors
-        super_set = [tuple(x) for x in super_set]
+
+        super_set = list(set([tuple(x) for x in super_set]))
         self.index_dict = {value: index for index, value in enumerate(super_set)}
         self.index_dict_reverse = {index: value for index, value in enumerate(super_set)}
+        # there might be duplicates among sets, so we build each set's match dict separately from the super set
+        for a_set in self.set_list:
+            a_set.make_match_dict(self.index_dict)
         self.palette = super_set
         self.max_index = len(super_set)

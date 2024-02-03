@@ -16,6 +16,8 @@ class IndexedSet:
         self.set_index = None
         self.block_size = len(vectors[0])
         self.tree = KDTree(vectors)
+        self.match_dict = {}
+        self.match_dict_reverse = {}
 
     def get_matches(self, vectors):
         """
@@ -25,5 +27,16 @@ class IndexedSet:
         """
         distances, vector_indices = self.tree.query(vectors)
         return distances, vector_indices
+
+    def make_match_dict(self, super_dict):
+        """
+        This method creates a dictionary of matches for each vector in the set
+        :return: A dictionary of matches
+        """
+        for i, vector in enumerate(self.vectors):
+            super_index = super_dict[tuple(vector)]
+            self.match_dict[tuple(vector)] = super_index
+            self.match_dict_reverse[super_index] = tuple(vector)
+
 
 
