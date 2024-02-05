@@ -53,12 +53,14 @@ def get_ssim(original_path, compressed_path):
     ssim_index = ssim(uncompressed_gray, compressed_gray, data_range=max_val - min_val)
     return ssim_index
 
-""""
-ssim_index = get_ssim("images/test/reference.png", "images/test/reference.jpeg")
-print("ssim", ssim_index)
-ssim_index = get_ssim("images/test/reference.png", "images/test/test.png")
-print("ssim", ssim_index)
 """
+ssim_index = get_ssim("images/test/reference.png", "images/test/reference.jpeg")
+print("jpeg   ssim", ssim_index)
+ssim_index = get_ssim("images/test/reference.png", "images/test/test.png")
+print("vector ssim", ssim_index)
+
+"""
+
 
 
 

@@ -8,14 +8,12 @@ class Header:
         self.height = HeaderProperty('height', 32)
         self.width = HeaderProperty('width', 32)
         self.compressed_length = HeaderProperty('length', 64)
-        self.uncompressed_bit_size = HeaderProperty('uncompressed_bit_size', 8)
         self.clip_min = HeaderProperty('clip_min', 8)
         self.clip_max = HeaderProperty('clip_max', 8)
+        self.row_zipper_length = HeaderProperty('row_zipper_length', 32)
         self.header_string = None
-        self.transposed = HeaderProperty('transposed', 8)
-        self.header_properties = [self.height, self.width, self.compressed_length, self.uncompressed_bit_size, self.clip_min, self.clip_max, self.transposed]
+        self.header_properties = [self.height, self.width, self.row_zipper_length, self.compressed_length, self.clip_min, self.clip_max]
         self.total_length = sum([h_property.get_property_bit_size() for h_property in self.header_properties])
-
 
     def build_header(self, property_values):
         # assign values to header properties and build binary header string for compression

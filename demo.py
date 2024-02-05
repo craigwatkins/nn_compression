@@ -23,12 +23,12 @@ def decompress_image(save_path):
 def demo():
     crop_size = 250
     crop_offset = 150
-    crop_image = False
-    image = "16"
+    crop_image = True
+    image = "05"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
     # error_threshold controls the quality of the compression - lowering error threshold increases quality
-    error_threshold = 3000
+    error_threshold = 10
     # search_depth controls the thoroughness of the search - higher values are slower and may improve compression ratio
     search_depth = 10
     # make a lossless reference image that can be used to check the compression quality
@@ -50,8 +50,8 @@ def demo():
     psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.jpeg")
     print("jpeg psnr", psnr_j)
 
-    # psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.webp")
-    # print("webp psnr", psnr_j)
+    #psnr_j = calculate_psnr("images/test/reference.png", "images/test/reference.webp")
+    #print("webp psnr", psnr_j)
     # psnr_j = calculate_psnr("images/test/reference.png", "images/test/verify.png")
 
 

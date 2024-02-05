@@ -37,6 +37,3 @@ class IndexedSet:
             super_index = super_dict[tuple(vector)]
             self.match_dict[tuple(vector)] = super_index
             self.match_dict_reverse[super_index] = tuple(vector)
-
-
-
