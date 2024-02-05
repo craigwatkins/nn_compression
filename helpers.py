@@ -32,7 +32,6 @@ def calculate_psnr(original_path, compressed_path):
     return psnr
 
 
-
 def get_ssim(original_path, compressed_path):
     from skimage import io, color
     from skimage.metrics import structural_similarity as ssim
@@ -52,14 +51,6 @@ def get_ssim(original_path, compressed_path):
     # Compute SSIM
     ssim_index = ssim(uncompressed_gray, compressed_gray, data_range=max_val - min_val)
     return ssim_index
-
-"""
-ssim_index = get_ssim("images/test/reference.png", "images/test/reference.jpeg")
-print("jpeg   ssim", ssim_index)
-ssim_index = get_ssim("images/test/reference.png", "images/test/test.png")
-print("vector ssim", ssim_index)
-
-"""
 
 
 
