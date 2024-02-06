@@ -1,16 +1,14 @@
 import numpy as np
 import cv2 as cv
-import time
 from numba import jit
 
 
-#from huffman_compression import HuffmanCoding
-import padded_binary as pb
 from header import Header
 from collections import Counter
 from sklearn.cluster import KMeans
 from scipy.spatial import KDTree
 from canonical_huffman import HuffmanCoding as HuffmanCoding
+from canonical_huffman import padded_binary as pb
 class NNCompressor:
     """
     Description: This class is used to compress and decompress a given image.
