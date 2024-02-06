@@ -49,7 +49,7 @@ class NNCompressor:
 
         return create_lookup_table()
 
-    def compress(self, source_path, compressed_path, error_threshold=2, search_depth=5):
+    def compress(self, source_path, compressed_path, error_threshold=2):
         """
         Description: This method is used to compress the image.
         param: source_path: The path to the image to be compressed.
@@ -60,8 +60,6 @@ class NNCompressor:
         A higher value usually increases the compression ratio, but also increases
         the time required to compress the image.
         """
-
-        self.search_depth = search_depth
         self.compressed_path = compressed_path
         self.error_threshold = error_threshold
         self.preprocess_image(source_path)
@@ -101,16 +99,12 @@ class NNCompressor:
         self.original_values = np.insert(self.original_values, 0, self.DEFAULT_ROW_VALUE, axis=0)
         # add left columns with default values
         self.original_values = np.insert(self.original_values, 0, self.DEFAULT_ROW_VALUE, axis=1)
-
         self.height = self.original_values.shape[0]
-        self.width = self.original_values.shape[1]
-
         # flatten rgb channels into each row   [r1,g1,b1,r2,g2,b2,...]
         self.original_values = self.original_values.reshape(self.height, -1)
         self.width = self.original_values.shape[1]
 
     def get_best_matches(self):
-        common_matches = 10
         a_set = self.lookup_table.set_list[0]
         a_set2 = self.lookup_table.set_list[-1]
         errors = []
@@ -122,29 +116,21 @@ class NNCompressor:
                 avg = (top + left) // 2
                 diffs = avg - current
                 reference = avg
-                distance, index = a_set.get_matches(diffs)
+                index, distance = a_set.get_matches(diffs)
+                match = a_set.vectors[index]
                 error_threshold = self.error_threshold
                 errors.append(a_set.vectors[index] - diffs)
                 if distance < error_threshold:
-                    match = a_set.vectors[index]
                     self.compressed_indexes.append(self.lookup_table.index_dict[match])
                     self.compressed_values[row_idx, col_idx:col_idx + 3] = np.clip(reference - match, self.clip_min,
                                                                                    self.clip_max)
                 else:
-                    distance, index = a_set2.get_matches(diffs)
+                    index, distance = a_set2.get_matches(diffs)
                     match = a_set2.vectors[index]
                     self.compressed_indexes.append(self.lookup_table.index_dict[match])
                     self.compressed_values[row_idx, col_idx:col_idx + 3] = np.clip(reference - match, self.clip_min,
                                                                                    self.clip_max)
                 self.matches.append(match)
-
-        print("common matches:", common_matches)
-
-    def add_lookup_indexes(self, matches, col_indexes):
-        # adds the lookup indexes for the matches to self.row_lookup_indexes
-        lookup_indexes = [self.lookup_table.index_dict[tuple(x)] for x in matches]
-        for j in range(len(lookup_indexes)):
-            self.row_lookup_indexes[col_indexes[j]] = lookup_indexes[j]
 
     def huff_compress(self):
         """

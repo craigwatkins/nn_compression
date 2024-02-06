@@ -51,9 +51,15 @@ def retrieve_sets():
         # Convert numpy array to a list of tuples
         list_of_tuples = [tuple(row) for row in np_data]
         result.append(list_of_tuples)
-
     conn.close()
     return result
+
+def vaccuum_db():
+    conn = sqlite3.connect('lookup_table_avg_centroids.db')
+    conn.execute('VACUUM')
+    conn.commit()
+    conn.close()
+
 
 
 

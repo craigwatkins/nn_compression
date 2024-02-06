@@ -24,19 +24,17 @@ def demo():
     crop_size = 250
     crop_offset = 150
     crop_image = False
-    image = "05"
+    image = "16"
     source_path = f"""images/kodak/kodim{image}.png"""
     save_path = f"""bins/test/{image}.bin"""
     # error_threshold controls the quality of the compression - lowering error threshold increases quality
-    error_threshold = 10
-    # search_depth controls the thoroughness of the search - higher values are slower and may improve compression ratio
-    search_depth = 10
+    error_threshold = 3.1
     # make a lossless reference image that can be used to check the compression quality
     make_reference_image(source_path, crop_size, crop_offset, crop_image=crop_image)
 
     print("compressing image")
     compressed = NNCompressor()
-    compressed.compress('images/test/reference.png', save_path, error_threshold, search_depth)
+    compressed.compress('images/test/reference.png', save_path, error_threshold)
     # save the regenerated image
     save_image(compressed.compressed_values, "images/test/test.png")
     # Technically, there is no need to delete the compression object, as it is intended to be used multiple times.

@@ -45,7 +45,7 @@ def create_lookup_table():
     sample_sets = lookup_db.retrieve_sets()
     # sort the sets in sample sets by length, shortest first
     sample_sets.sort(key=lambda x: len(x))
-    sample_sets = [sample_sets[6], sample_sets[-1]]
+    sample_sets = [sample_sets[5], sample_sets[-1]]
     # remove duplicates from largest set
     sample_sets[-1] = list(set(sample_sets[-1]) - set(sample_sets[0]))
     index_sets = [IndexedSet(x) for x in sample_sets]

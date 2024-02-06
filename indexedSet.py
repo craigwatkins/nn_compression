@@ -1,5 +1,6 @@
 from scipy.spatial import KDTree
-
+from annoy import AnnoyIndex
+import os
 
 class IndexedSet:
     """
@@ -11,13 +12,21 @@ class IndexedSet:
                     block_size: The size of the tuple
     """
 
-    def __init__(self, vectors):
+    def __init__(self, vectors, make_index=True):
         self.vectors = vectors
         self.set_index = None
         self.block_size = len(vectors[0])
         self.tree = KDTree(vectors)
         self.match_dict = {}
         self.match_dict_reverse = {}
+        self.file_name = ''
+        self.file_name = f'''annoyIndexes/tree_{len(self.vectors)}.ann'''
+        self.annoy_num_trees = 6
+        self.index = None
+        if make_index:
+            self.create_index()
+        else:
+            self.load_index()
 
     def get_matches(self, vectors):
         """
@@ -25,12 +34,25 @@ class IndexedSet:
         :param vectors: The vectors to search for
         :return: The closest match for each vector, and the distance to that match
         """
-        distances, vector_indices = self.tree.query(vectors)
-        return distances, vector_indices
+        index, distance = self.index.get_nns_by_vector(vectors, 1, include_distances=True)
+        return index[0], distance[0]
+
+    def create_index(self):
+        self.index = AnnoyIndex(self.block_size, metric='euclidean')
+        for i, vector in enumerate(self.vectors):
+            self.index.add_item(i, vector)
+        self.index.build(self.annoy_num_trees)
+        #self.index.save(self.file_name)
+
+    def load_index(self):
+        if os.path.isfile(self.file_name):
+            self.index = AnnoyIndex(self.block_size, 'euclidean')
+            self.index.load(self.file_name)
+
 
     def make_match_dict(self, super_dict):
         """
-        This method creates a dictionary of matches for each vector in the set
+        This method creates a dictionary of matches for each vector in the set that interfaces with the super_dict
         :return: A dictionary of matches
         """
         for i, vector in enumerate(self.vectors):
