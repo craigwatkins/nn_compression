@@ -42,7 +42,7 @@ class IndexedSet:
         for i, vector in enumerate(self.vectors):
             self.index.add_item(i, vector)
         self.index.build(self.annoy_num_trees)
-        #self.index.save(self.file_name)
+        # self.index.save(self.file_name)
 
     def load_index(self):
         if os.path.isfile(self.file_name):

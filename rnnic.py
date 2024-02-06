@@ -4,13 +4,13 @@ import time
 from numba import jit
 
 
-from huffman_compression import HuffmanCoding
+#from huffman_compression import HuffmanCoding
 import padded_binary as pb
 from header import Header
 from collections import Counter
 from sklearn.cluster import KMeans
 from scipy.spatial import KDTree
-from canonical_huffman import HuffmanCoding as CanonicalHuffmanCoding
+from canonical_huffman import HuffmanCoding as HuffmanCoding
 class NNCompressor:
     """
     Description: This class is used to compress and decompress a given image.
@@ -154,8 +154,10 @@ class NNCompressor:
         large_rows = large_rows.flatten()
         huff_small = HuffmanCoding()
         huff_large = HuffmanCoding()
-        huff_small_compressed, encoded_list_small = huff_small.compress(small_rows)
-        huff_large_compressed, encoded_list_large = huff_large.compress(large_rows)
+        huff_small.compress(small_rows)
+        huff_large.compress(large_rows)
+        huff_small_compressed = huff_small.file_info
+        huff_large_compressed = huff_large.file_info
         file_info = is_small_string + huff_small_compressed + huff_large_compressed
         self.compressed_length = len(huff_small_compressed)
         return file_info
@@ -188,12 +190,13 @@ class NNCompressor:
         row_zipper = full_file[header_length:header_length + self.row_zipper_length]
         current_index = header_length + self.row_zipper_length
         small_rows = full_file[current_index: current_index + smalls_bit_length]
-        small_rows_length = len(small_rows)
         current_index += smalls_bit_length
         huff = HuffmanCoding()
-        decompressed_indexes_small = huff.decompress_file(small_rows)
+        huff.binaries = small_rows
+        decompressed_indexes_small = huff.decompress_file()
         large_rows = full_file[current_index:]
         huff = HuffmanCoding()
+        huff.binaries = large_rows
         decompressed_indexes_large = huff.decompress_file(large_rows)
         index_width = self.width // 3
         decompressed_indexes = np.zeros(self.height * index_width, dtype=np.int32)

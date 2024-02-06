@@ -6,7 +6,7 @@ from helpers import save_image
 def compress(args):
     compressor = NNCompressor()
     print("Compressing image...")
-    compressor.compress(args.image_path, args.save_path, args.error_threshold, args.search_depth)
+    compressor.compress(args.image_path, args.save_path, args.error_threshold)
     print(f"Image compressed and saved as binary to {args.save_path}")
 
 
@@ -27,7 +27,6 @@ def main():
     compress_parser.add_argument("image_path", help="Path to the image to compress")
     compress_parser.add_argument("save_path", help="Path to save the compressed image")
     compress_parser.add_argument("error_threshold", type=float, help="Error threshold for compression")
-    compress_parser.add_argument("search_depth", type=int, help="Search depth for compression")
     compress_parser.set_defaults(func=compress)
 
     # Subparser for the decompress command
