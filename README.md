@@ -42,12 +42,13 @@ There are a number of ways provided to explore this project:
 
 Example usage:
   ```bash
+  cd src
   python main.py compress  '../images/kodak/kodim01.png' '../bins/test/01.bin' 4
   python main.py decompress '../bins/test/01.bin', '../images/test/kodim01.png'
   ```
-`demo.py`: Tests both compression and decompression for a single image. It saves a png of the compressed data and compares it to the decompressed values from the binary to ensure that decompression was successful. It also asseses the quality of the compressed image by comparing it to the original image using peak signal to noise ratio (PSNR).
+`tests/demo.py`: Tests both compression and decompression for a single image. It saves a png of the compressed data and compares it to the decompressed values from the binary to ensure that decompression was successful. It also assesses the quality of the compressed image by comparing it to the original image using peak signal to noise ratio (PSNR).
 
-`kodak_test.py`: Compresses images in the Kodak dataset and compares them to JPEG versions. This can be used to validate the results noted above.
+`tests/kodak_test.py`: Compresses images in the Kodak dataset and compares them to JPEG versions. This can be used to validate the results noted above.
 
 
 # Installation Guide
