@@ -42,7 +42,7 @@ There are a number of ways provided to explore this project:
 
 Example usage:
 
-A command line interface is provided for compressing and decompressing images. The following commands can be used to compress and decompress an image:
+In this example we use some of the Kodak images provided.
   ```bash
 python -m src.main compress './images/kodak/kodim01.png' './bins/test/01.png' 4
 python -m src.main decompress './bins/test/01.bin', './images/test/kodim01.png'
