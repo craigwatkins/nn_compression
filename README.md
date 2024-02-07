@@ -41,11 +41,15 @@ There are a number of ways provided to explore this project:
     - `save_path`: The path to the image to save the decompressed data to.
 
 Example usage:
+
+A command line interface is provided for compressing and decompressing images. The following commands can be used to compress and decompress an image:
   ```bash
   cd src
 python -m src.main compress './images/kodak/kodim01.png' './bins/test/01.png' 4
 python -m src.main decompress './bins/test/01.bin', './images/test/kodim01.png'
   ```
+Tests:
+
 `python -m tests.demo`: Tests both compression and decompression for a single image. It saves a png of the compressed data and compares it to the decompressed values from the binary to ensure that decompression was successful. It also assesses the quality of the compressed image by comparing it to the original image using peak signal to noise ratio (PSNR).
 
 `python -m tests.test_kodak`: Compresses images in the Kodak dataset and compares them to JPEG versions. This can be used to validate the results noted above.
