@@ -91,17 +91,6 @@ This project relies on several third-party libraries, including OpenCV, NumPy, S
    pip install numba~=0.58.1
    ```
 
-## Post-Installation
-After successfully installing these packages, verify the installation by checking the versions of the installed packages:
-
-```bash
-python -c "import cv2; print(cv2.__version__)"
-python -c "import numpy; print(numpy.__version__)"
-python -c "import scipy; print(scipy.__version__)"
-python -c "import numba; print(numba.__version__)"
-```
-
-If the above commands return the expected versions without errors, you have successfully installed all the required dependencies.
 
 ## Troubleshooting
 If you encounter any issues during installation, consider the following:
