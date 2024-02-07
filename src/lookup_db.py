@@ -1,10 +1,24 @@
 import sqlite3
 import numpy as np
+import os
 
+DATA_DIR = 'data'
+DB_NAME = 'lookup_table_avg_centroids.db'
 
+def get_db_location():
+    # Path to the script being executed
+    script_path = os.path.abspath(__file__)
+    # Directory containing the script
+    script_dir = os.path.dirname(script_path)
+    # get the parent directory of the current directory
+    parent_dir = os.path.dirname(script_dir)
+    # add the data directory to the parent directory
+    data_dir = os.path.join(parent_dir, DATA_DIR)
+    db_location = os.path.join(data_dir, DB_NAME)
+    return db_location
 def create_database():
     # Connect to the SQLite database
-    conn = sqlite3.connect('../data/lookup_table_avg_centroids.db')
+    conn = sqlite3.connect(get_db_location())
 
     # Create a new SQLite table
     conn.execute('''CREATE TABLE random_sets
@@ -26,7 +40,7 @@ def insert_set(data):
     serialized_data = sqlite3.Binary(np_data.tobytes())
 
     # Connect to the SQLite database
-    conn = sqlite3.connect('lookup_table.db')
+    conn = sqlite3.connect(get_db_location())
 
     # Insert the data into the table
     conn.execute('INSERT INTO random_sets (block_size, num_entries, data) VALUES (?, ?, ?)',
@@ -37,7 +51,7 @@ def insert_set(data):
 
 def retrieve_sets():
     # Connect to the SQLite database
-    conn = sqlite3.connect('../data/lookup_table_avg_centroids.db')
+    conn = sqlite3.connect(get_db_location())
 
     # Retrieve all rows from the table
     cursor = conn.execute('SELECT block_size, num_entries, data FROM random_sets')
@@ -55,12 +69,8 @@ def retrieve_sets():
     return result
 
 def vaccuum_db():
-    conn = sqlite3.connect('../data/lookup_table_avg_centroids.db')
+    conn = sqlite3.connect(get_db_location())
     conn.execute('VACUUM')
     conn.commit()
     conn.close()
-
-
-
-
 

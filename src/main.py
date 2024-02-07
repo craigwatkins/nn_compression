@@ -1,6 +1,6 @@
 import argparse
-from rnnic import NNCompressor  # Import your NNCompressor class
-from helpers import save_image
+from src.rnnic import NNCompressor  # Import your NNCompressor class
+from src.helpers import save_image
 
 
 def compress(args):

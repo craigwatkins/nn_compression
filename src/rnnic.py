@@ -3,7 +3,8 @@ import cv2 as cv
 from numba import jit
 
 from src.header import Header
-from canonical_huffman import HuffmanCoding as HuffmanCoding
+#from canonical_huffman import HuffmanCoding as HuffmanCoding
+from canonical_huffman.huffman_compression import HuffmanCoding
 from canonical_huffman import padded_binary as pb
 
 

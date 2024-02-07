@@ -10,6 +10,19 @@ This is a script to compress all of the images in the kodak dataset and compare 
 JPEG files. It also calculates the PSNR of the compressed images and the JPEG images to confirm that the quality is
 similar.
 """
+BIN_FOLDER = "bins"
+IMAGES_FOLDER = "images"
+
+def get_path(folder, file_name=""):
+    # Path to the script being executed
+    script_path = os.path.abspath(__file__)
+    # Directory containing the script
+    script_dir = os.path.dirname(script_path)
+    # get the parent directory of the current directory
+    parent_dir = os.path.dirname(script_dir)
+    # add the folder and file name to the parent directory
+    full_path = os.path.join(parent_dir, folder, file_name)
+    return full_path
 
 
 def get_images(directory):
@@ -19,6 +32,7 @@ def get_images(directory):
             image_list.append((os.path.join(directory, filename), filename))
     return image_list
 
+
 def compress_image(image_path, save_path, error_threshold):
     compressor = NNCompressor()
     compressed = compressor.compress(image_path, save_path, error_threshold)
@@ -27,7 +41,6 @@ def compress_image(image_path, save_path, error_threshold):
 
 def calculate_psnr(original_path, compressed):
     original = cv2.imread(original_path)
-    #compressed = cv2.imread(compressed_path)
     mse = np.mean((original - compressed) ** 2)
     mae = np.mean(np.abs(original - compressed))
     if mse == 0:  # MSE is zero means no noise is present in the signal.
@@ -38,8 +51,9 @@ def calculate_psnr(original_path, compressed):
     psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
     return psnr
 
+
 def compress_and_compare():
-    images = get_images("../images/kodak")
+    images = get_images(get_path(IMAGES_FOLDER, "kodak"))
     error_thresholds = [0.0]*25
     error_thresholds[0] = 3.3
     error_thresholds[1] = 20
@@ -72,8 +86,8 @@ def compress_and_compare():
     for i, image in enumerate(images):
         if i < start:
             continue
-        bin_save_path = f"../bins/test/{image[1]}.bin"
-        jpeg_file_path = f"../images/test/{image[1]}.jpeg"
+        bin_save_path = get_path(BIN_FOLDER, f"test/{image[1]}.bin")
+        jpeg_file_path = get_path(IMAGES_FOLDER, f"test/{image[1]}.jpeg")
         compressed = compress_image(image[0], bin_save_path, error_thresholds[i])
         # save compressed image
         psnr = calculate_psnr(image[0], compressed)
@@ -88,7 +102,6 @@ def compress_and_compare():
         # PSNR diff should always be positive for this to be a valid comparison
         print("Img:", i, "| PSNR Diff:", round(image[1] - image[2], 3), "| Error thresh:",
               image[3], " | Size diff:", image[4] - image[5], "bytes", "| Size ratio:", round(image[4] / image[5], 3))
-
         if i >= stop:
             break
     total_jpeg_size = sum([x[5] for x in image_settings if x])
@@ -98,11 +111,12 @@ def compress_and_compare():
     print("Percentage of JPEG Size:", round(total_compressed_size / total_jpeg_size, 3)*100, "%")
 
 
+def main():
+    compress_and_compare()
 
 
-
-
-compress_and_compare()
+if __name__ == "__main__":
+    main()
 
 
 
