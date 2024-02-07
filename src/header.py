@@ -1,5 +1,5 @@
 # class for the header object of a compressed image
-from header_property import HeaderProperty
+from src.header_property import HeaderProperty
 
 
 class Header:
@@ -47,16 +47,3 @@ class Header:
             header_values[h_property.get_property_name()] = h_property_value
             current_index += h_property.get_property_bit_size()
         return header_values
-
-
-# run if this file is called directly
-if __name__ == '__main__':
-    # create a header object
-    header = Header()
-    # build a header
-    header.build_header([641, 480, 2**16-1, 8, 0, 255])
-    # print the header
-    print(header.get_header())
-    # decompress the header
-    print(header.decompress_header_values(header.get_header()))
-    header.show_header()

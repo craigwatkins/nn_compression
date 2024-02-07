@@ -2,13 +2,11 @@ import numpy as np
 import cv2 as cv
 from numba import jit
 
-
-from header import Header
-from collections import Counter
-from sklearn.cluster import KMeans
-from scipy.spatial import KDTree
+from src.header import Header
 from canonical_huffman import HuffmanCoding as HuffmanCoding
 from canonical_huffman import padded_binary as pb
+
+
 class NNCompressor:
     """
     Description: This class is used to compress and decompress a given image.
@@ -43,7 +41,7 @@ class NNCompressor:
         """
         Description: This method is used to get the lookup tables.
         """
-        from create_lookup_tables import create_lookup_table
+        from src.create_lookup_tables import create_lookup_table
 
         return create_lookup_table()
 

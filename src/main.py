@@ -13,8 +13,8 @@ def compress(args):
 def decompress(args):
     decompressor = NNCompressor()
     decompressor.decompress(args.compressed_image_path)
-    save_image(decompressor.decompressed_values, args.output_path)
-    print(f"Image decompressed and saved as lossless PNG at {args.output_path}")
+    save_image(decompressor.decompressed_values, args.save_path)
+    print(f"Image decompressed and saved as lossless PNG at {args.save_path}")
 
 
 def main():

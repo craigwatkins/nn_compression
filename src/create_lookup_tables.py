@@ -1,8 +1,7 @@
-from lookupTable import LookupTable
-import lookup_db
-from indexedSet import IndexedSet
-import numpy as np
-from sklearn.cluster import KMeans
+from src.lookupTable import LookupTable
+import src.lookup_db as lookup_db
+from src.indexedSet import IndexedSet
+
 SEED = 42
 
 

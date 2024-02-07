@@ -10,18 +10,17 @@ Unlike the distributions of colors, which vary greatly from image to image depen
 
 
 ## How it Works
-This implementation of RNNIC employs a KD tree for finding the nearest neighbor in the differences palette to the original pixel differences. It then uses Huffman compression on the index values from the palette.
+This implementation of RNNIC employs an approximate nearest neighbor algorithm, to find the nearest neighbor in the differences palette to the original pixel differences. It then uses Huffman compression on the index values from the palette.
 
-In principle, any sort of nearest neighbor algorithm can be effective and methods could be switched out rather easily. Approximate methods such as [ANNOY](https://pypi.org/project/annoy/) or [FAISS](https://ai.meta.com/tools/faiss/) could also be employed to increase performance.
+In principle, any sort of nearest neighbor algorithm can be effective and methods could be switched out rather easily. This implmentation uses [ANNOY](https://pypi.org/project/annoy/) (Approximate Nearest Neighbors Oh Yeah) a package that Spotify developed for music recommendation.
+In principle any similar method can be used. For example, [FAISS](https://ai.meta.com/tools/faiss/) could also be employed to increase performance. The compression algorithm is neutral to the method used to find the nearest neighbor.
 
-A greedy algorithm is used to match the largest string of pixels it can while staying under a given error threshold. The sums of nearby pixels are used to identify sets of pixels that will likely have a good match in order to reduce the number of comparisons required.
-
-The current implementation requires a significant amount of computations per pixel for compression, but has a linear time complexity with regard to image size. Decompression is straightforward and fast, primarily consisting of a hash table lookup after Huffman decompression.
+The current implementation requires a significant amount of computations per pixel for compression, but has a linear time complexity with regard to image size. Decompression is straightforward and very fast, primarily consisting of a hash table lookup after Huffman decompression.
 
 ## Results
 To evaluate the effectiveness of this proof of concept, the images from the [Kodak dataset](https://r0k.us/graphics/kodak/), originally used to evaluate PNG compression, were employed. It is important to note, that the lookup table pixel difference samples were derived from a completely different set, the [Flickr 8k Dataset](https://www.kaggle.com/datasets/adityajn105/flickr8k), so there was no data leakage from the samples themselves. Also, the total size of the palette when stored in database format, is less than 400 kilobytes. For comparison, storing the image data from a single image from the Kodak dataset in a similar, uncompressed fashion would take well over a megabyte. 
 
-For each images in the Kodak set, the compression settings were adjusted to achieve at least the same Peak Signal to Noise Ratio (PSNR) as the 100% quality JPEG version of the image. The result was that every single image achieved a higher compression ratio vs. JPEG and **the overall compressed size of the Kodak dataset was improved by 16%**. 
+For each images in the Kodak set, the compression settings were adjusted to achieve at least the same Peak Signal to Noise Ratio (PSNR) as the 100% quality JPEG version of the image. The result was that every single image achieved a higher compression ratio vs. JPEG and **the overall compressed size of the Kodak dataset was reduced by more than 20%**. 
 
 In the current proof of concept implementation, RNNIC does not degrade as gracefully as JPEG, so it’s advantages only appear at the very highest quality settings.
 
@@ -35,7 +34,7 @@ There are a number of ways provided to explore this project:
     - `image_path`: The path to the image to be compressed.
     - `save_path`: The path to the binary file to save the compressed data to.
     - `error_threshold`: The maximum error allowed for matches before trying a smaller pixel string size. Decreasing this value will usually increase quality at the expense of compression ratio.
-    - `search_depth`: This controls the threshold for identifying possible matches. A higher value usually increases the compression ratio, but also increases the time required to compress the image.
+    
 - `decompress`: Decompresses a binary file and saves the decompressed data to a lossless PNG image for inspection.
   - Arguments:
     - `compressed_image_path`: The path to the binary file to be decompressed.
@@ -43,8 +42,8 @@ There are a number of ways provided to explore this project:
 
 Example usage:
   ```bash
-  python main.py compress  'images/kodak/kodim01.png', 'bins/test/01.bin', 4, 10
-  python main.py decompress 'bins/test/01.bin', 'images/test/kodim01.png'
+  python main.py compress  '../images/kodak/kodim01.png' '../bins/test/01.bin' 4
+  python main.py decompress '../bins/test/01.bin', '../images/test/kodim01.png'
   ```
 `demo.py`: Tests both compression and decompression for a single image. It saves a png of the compressed data and compares it to the decompressed values from the binary to ensure that decompression was successful. It also asseses the quality of the compressed image by comparing it to the original image using peak signal to noise ratio (PSNR).
 
