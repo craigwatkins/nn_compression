@@ -8,6 +8,8 @@ From the earliest days of image compression, color palettes have been used to co
 
 Unlike the distributions of colors, which vary greatly from image to image depending upon the subject matter, the differences between pixels are often quite similar across images. Thus, a random sampling from a variety of images can give a very flexible palette. Not only is this palette of differences relatively small, but it can be shared across almost any image - it does not have to be redefined for each one.
 
+The randomly sampled differences have been further refined with K-means clustering to derive palettes of varying sizes by using the centroids of the clusters. This reduces the number of values in the palette to a very small size, while still maintaining a high level of quality. A little over a thousand values is all it takes to exceed the quality of JPEG at the highest settings.
+
 
 ## How it Works
 This implementation of RNNIC employs an approximate nearest neighbor algorithm, to find the nearest neighbor in the differences palette to the original pixel differences. It then uses Huffman compression on the index values from the palette.
