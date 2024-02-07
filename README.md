@@ -13,7 +13,7 @@ Unlike the distributions of colors, which vary greatly from image to image depen
 This implementation of RNNIC employs an approximate nearest neighbor algorithm, to find the nearest neighbor in the differences palette to the original pixel differences. It then uses Huffman compression on the index values from the palette.
 
 In principle, any sort of nearest neighbor algorithm can be effective and methods could be switched out rather easily. This implmentation uses [ANNOY](https://pypi.org/project/annoy/) (Approximate Nearest Neighbors Oh Yeah) a package that Spotify developed for music recommendation.
-In principle any similar method can be used. For example, [FAISS](https://ai.meta.com/tools/faiss/) could also be employed to increase performance. The compression algorithm is neutral to the method used to find the nearest neighbor.
+In principle any similar method can be used. For example, [FAISS](https://ai.meta.com/tools/faiss/) could also be employed. The compression algorithm is neutral to the method used to find the nearest neighbor.
 
 The current implementation requires a significant amount of computations per pixel for compression, but has a linear time complexity with regard to image size. Decompression is straightforward and very fast, primarily consisting of a hash table lookup after Huffman decompression.
 
